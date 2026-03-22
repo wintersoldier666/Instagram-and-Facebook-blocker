@@ -1,5 +1,6 @@
 package com.quell.app.overlay
 
+import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Handler
@@ -14,29 +15,42 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
 import com.quell.app.R
+import com.quell.app.data.repository.BlockingRepository
 import com.quell.app.util.QuotesProvider
 import com.quell.app.util.TimeUtils
 
 /**
  * Manages the full-screen blocking overlay and the daily check-in popup.
  *
- * THREADING: [showBlockOverlay], [showDailyPopup], and [dismissOverlay] must always be called
- * from the MAIN thread. The check-and-add is then atomic within the single-threaded main looper,
- * eliminating the TOCTOU race that a nested mainHandler.post would create.
+ * THREADING: [showBlockOverlay], [showDailyPopup], and [dismissOverlay] must be called
+ * from the MAIN thread. The check-and-add is atomic on the main looper.
  */
 class BlockingOverlayManager(private val context: Context) {
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+    private val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // MaterialCardView requires a Theme.MaterialComponents (or Material3) context.
-    // applicationContext has no theme, so we wrap it before inflating overlays.
     private val themedContext = ContextThemeWrapper(context, R.style.Theme_Quell)
     private val inflater = LayoutInflater.from(themedContext)
 
-    // Only written/read on the main thread — no lock needed.
     private var overlayView: View? = null
     private var snoozeEndTime: Long = 0L
+
+    // Foreground watcher — polls every second to dismiss overlay if user has left Instagram/Facebook.
+    // Needed because the accessibility service is now restricted to tracked packages only,
+    // so it no longer receives events from other apps (home launcher, banking apps, etc.).
+    private val foregroundWatchRunnable = object : Runnable {
+        override fun run() {
+            if (overlayView == null) return  // overlay gone, stop polling
+            if (!isTrackedAppForeground()) {
+                Log.d("QuellOverlay", "Tracked app no longer foreground — dismissing overlay")
+                removeCurrent()
+                return  // don't reschedule
+            }
+            mainHandler.postDelayed(this, 1_000)
+        }
+    }
 
     val isSnoozed: Boolean get() = System.currentTimeMillis() < snoozeEndTime
 
@@ -44,9 +58,6 @@ class BlockingOverlayManager(private val context: Context) {
     // Public API
     // -------------------------------------------------------------------------
 
-    /**
-     * Show full-screen blocking overlay. Must be called on the MAIN thread.
-     */
     fun showBlockOverlay(
         packageName: String,
         reason: String,
@@ -55,11 +66,9 @@ class BlockingOverlayManager(private val context: Context) {
         onSnooze: (() -> Unit)? = null
     ) {
         assertMainThread()
-        if (overlayView != null) return   // already showing — atomic on main thread
+        if (overlayView != null) return
 
-        val inflater = this.inflater
         val view = inflater.inflate(R.layout.overlay_blocking, null)
-
         val appName = if (packageName.contains("instagram")) "Instagram" else "Facebook"
 
         view.findViewById<TextView>(R.id.tv_app_name).text = appName
@@ -86,11 +95,9 @@ class BlockingOverlayManager(private val context: Context) {
         }
 
         addOverlay(view, Gravity.TOP or Gravity.START)
+        startForegroundWatcher()
     }
 
-    /**
-     * Show the daily check-in popup. Must be called on the MAIN thread.
-     */
     fun showDailyPopup(
         packageName: String,
         todayMinutes: Long,
@@ -100,9 +107,7 @@ class BlockingOverlayManager(private val context: Context) {
         assertMainThread()
         if (overlayView != null) return
 
-        val inflater = this.inflater
         val view = inflater.inflate(R.layout.dialog_usage_popup, null)
-
         val appName = if (packageName.contains("instagram")) "Instagram" else "Facebook"
 
         view.findViewById<TextView>(R.id.tv_popup_app_name).text = appName
@@ -114,40 +119,33 @@ class BlockingOverlayManager(private val context: Context) {
         view.findViewById<TextView>(R.id.tv_popup_quote).text = QuotesProvider.getNext()
 
         view.findViewById<Button>(R.id.btn_popup_continue).setOnClickListener {
-            dismissOverlay()
-            onContinue()
+            dismissOverlay(); onContinue()
         }
         view.findViewById<Button>(R.id.btn_popup_block).setOnClickListener {
-            dismissOverlay()
-            onBlockForToday()
+            dismissOverlay(); onBlockForToday()
         }
 
         addOverlay(view, Gravity.CENTER)
+        startForegroundWatcher()
     }
 
-    /**
-     * Remove the overlay if one is showing. Safe to call from any thread.
-     */
+    /** Safe to call from any thread. */
     fun dismissOverlay() {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            removeCurrent()
-        } else {
-            mainHandler.post { removeCurrent() }
-        }
+        if (Looper.myLooper() == Looper.getMainLooper()) removeCurrent()
+        else mainHandler.post { removeCurrent() }
     }
 
     fun isShowing(): Boolean = overlayView != null
 
     // -------------------------------------------------------------------------
-    // Internal helpers
+    // Internal
     // -------------------------------------------------------------------------
 
     private fun addOverlay(view: View, gravity: Int) {
         if (!Settings.canDrawOverlays(context)) {
-            Log.e("QuellOverlay", "Cannot show overlay — SYSTEM_ALERT_WINDOW not granted")
+            Log.e("QuellOverlay", "SYSTEM_ALERT_WINDOW not granted")
             return
         }
-
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -160,20 +158,48 @@ class BlockingOverlayManager(private val context: Context) {
             windowManager.addView(view, params)
             overlayView = view
         } catch (e: Exception) {
-            Log.e("QuellOverlay", "windowManager.addView failed", e)
+            Log.e("QuellOverlay", "addView failed", e)
         }
     }
 
     private fun removeCurrent() {
+        stopForegroundWatcher()
         overlayView?.let {
             try { windowManager.removeView(it) } catch (_: Exception) {}
             overlayView = null
         }
     }
 
+    private fun startForegroundWatcher() {
+        mainHandler.removeCallbacks(foregroundWatchRunnable)
+        mainHandler.postDelayed(foregroundWatchRunnable, 1_000)
+    }
+
+    private fun stopForegroundWatcher() {
+        mainHandler.removeCallbacks(foregroundWatchRunnable)
+    }
+
+    /**
+     * Returns true if Instagram or Facebook is the current foreground app.
+     * Uses UsageStatsManager (1-second window) which doesn't require the
+     * accessibility service to monitor non-tracked packages.
+     */
+    private fun isTrackedAppForeground(): Boolean {
+        return try {
+            val now = System.currentTimeMillis()
+            val stats = usageStatsManager.queryUsageStats(
+                UsageStatsManager.INTERVAL_DAILY, now - 2_000, now
+            )
+            stats?.maxByOrNull { it.lastTimeUsed }
+                ?.packageName in BlockingRepository.TRACKED_PACKAGES
+        } catch (e: Exception) {
+            true  // assume still foreground on error to avoid false dismissal
+        }
+    }
+
     private fun assertMainThread() {
         if (Looper.myLooper() != Looper.getMainLooper()) {
-            android.util.Log.e("QuellOverlay", "showBlockOverlay/showDailyPopup called off main thread!", Throwable())
+            Log.e("QuellOverlay", "Called off main thread!", Throwable())
         }
     }
 }

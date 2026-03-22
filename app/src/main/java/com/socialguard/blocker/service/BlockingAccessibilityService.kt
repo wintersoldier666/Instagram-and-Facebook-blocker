@@ -21,33 +21,35 @@ class BlockingAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(
         Dispatchers.IO + SupervisorJob() +
-            CoroutineExceptionHandler { _, t -> Log.e(TAG, "Coroutine exception", t) }
+            CoroutineExceptionHandler { _, t -> Log.e(TAG, "Coroutine error", t) }
     )
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Session tracking — @Volatile so reads from the main-thread timer Runnable
-    // see writes made by IO coroutines.
     @Volatile private var currentSessionId: Long = -1L
     @Volatile private var currentSessionStartMs: Long = 0L
-    @Volatile private var currentForegroundPkg: String = ""
+    @Volatile private var currentSessionPkg: String = ""   // pkg the active session belongs to
     @Volatile private var sessionTimerRunnable: Runnable? = null
 
     @Volatile private var cachedSettings: BlockingSettings? = null
     private var settingsLastFetch: Long = 0L
     private val settingsCacheTtlMs = 5_000L
 
+    // Throttle content-changed tree scans (DMs / Gaming) to at most once per 2 seconds.
+    private var lastTreeScanMs: Long = 0L
+
     companion object {
         private const val TAG = "QuellService"
 
-        // Nav-tab hints — used with TYPE_VIEW_SELECTED events (precise, no tree scan needed)
-        private val REELS_HINTS       = setOf("reels")
-        private val EXPLORE_HINTS     = setOf("search", "explore")
-        private val WATCH_HINTS       = setOf("watch", "videos")
-        private val MARKETPLACE_HINTS = setOf("marketplace")
+        // Nav tab labels as they appear in contentDescription / text (lowercase).
+        // These come from event.source on TYPE_VIEW_CLICKED — no tree traversal needed.
+        private val REELS_LABELS       = setOf("reels")
+        private val EXPLORE_LABELS     = setOf("search", "explore", "search and explore")
+        private val WATCH_LABELS       = setOf("watch", "video", "videos", "facebook watch")
+        private val MARKETPLACE_LABELS = setOf("marketplace")
 
-        // Non-tab screen hints — used with tree traversal on content-change events
-        private val DM_HINTS      = setOf("direct", "messages", "instagram direct")
-        private val GAMING_HINTS  = setOf("gaming", "facebook gaming")
+        // Non-tab screen hints for tree traversal (DMs / Gaming).
+        private val DM_HINTS     = setOf("direct", "instagram direct")
+        private val GAMING_HINTS = setOf("gaming", "facebook gaming")
 
         var instance: BlockingAccessibilityService? = null
             private set
@@ -63,7 +65,7 @@ class BlockingAccessibilityService : AccessibilityService() {
         repository = BlockingRepository.getInstance(applicationContext)
         overlayManager = BlockingOverlayManager(applicationContext)
         startMonitoringService()
-        Log.i(TAG, "Accessibility service connected")
+        Log.i(TAG, "Service connected")
     }
 
     override fun onInterrupt() {
@@ -85,250 +87,205 @@ class BlockingAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
         val pkg = event.packageName?.toString() ?: return
+        if (pkg !in BlockingRepository.TRACKED_PACKAGES) return  // XML restricts this too, belt+braces
 
         when (event.eventType) {
 
-            // Window changed — handle master blocks, time limits, session tracking.
-            // Also dismiss any lingering overlay if the user has left a tracked app.
+            // App opened / screen changed — run master checks (block toggle, time limits, session)
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                handleWindowStateChanged(pkg)
+                serviceScope.launch { handleAppOpened(pkg) }
             }
 
-            // Tab selected — precise signal for nav-tab section blocking (Reels, Watch, etc.).
-            // TYPE_VIEW_SELECTED fires exactly when a tab becomes selected; no tree scan needed.
+            // User tapped something — check if it's a blocked nav tab via event.source.
+            // event.source gives the exact clicked view's contentDescription/text directly,
+            // so no tree traversal is needed. This is the most reliable way to detect
+            // Instagram/Facebook tab navigation across all app versions.
+            AccessibilityEvent.TYPE_VIEW_CLICKED,
             AccessibilityEvent.TYPE_VIEW_SELECTED -> {
-                if (pkg !in BlockingRepository.TRACKED_PACKAGES) return
-                val desc = event.contentDescription?.toString()?.lowercase() ?: ""
-                val text = event.text.firstOrNull()?.toString()?.lowercase() ?: ""
+                val source = event.source ?: return
+                val desc = source.contentDescription?.toString()?.lowercase()?.trim() ?: ""
+                val text = source.text?.toString()?.lowercase()?.trim() ?: ""
+                source.recycle()
                 val label = if (desc.isNotEmpty()) desc else text
-                if (label.isNotEmpty()) handleTabSelected(pkg, label)
+                if (label.isNotEmpty()) {
+                    serviceScope.launch { handleNavLabel(pkg, label) }
+                }
             }
 
-            // Content / click — for non-tab screen detection (DMs, Gaming).
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
-            AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                if (pkg !in BlockingRepository.TRACKED_PACKAGES) return
-                val rootNode = try { rootInActiveWindow }
-                    catch (e: Exception) { null } ?: return
+            // Content changed — tree scan for non-tab screens (DMs, Gaming), throttled.
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                val now = System.currentTimeMillis()
+                if (now - lastTreeScanMs < 2_000) return
+                lastTreeScanMs = now
+                val root = try { rootInActiveWindow } catch (e: Exception) { null } ?: return
                 serviceScope.launch {
-                    val settings = getSettings() ?: run {
-                        runCatching { rootNode.recycle() }; return@launch
-                    }
-                    checkNonTabSections(pkg, settings, rootNode)
+                    val settings = getSettings() ?: run { runCatching { root.recycle() }; return@launch }
+                    checkNonTabSections(pkg, settings, root)
                 }
             }
         }
     }
 
     // -------------------------------------------------------------------------
-    // Window state handling (master block, time limits, session)
+    // Master checks — run on every window state change
     // -------------------------------------------------------------------------
 
-    private fun handleWindowStateChanged(pkg: String) {
-        val wasTracked = currentForegroundPkg in BlockingRepository.TRACKED_PACKAGES
-        val isTracked  = pkg in BlockingRepository.TRACKED_PACKAGES
+    private suspend fun handleAppOpened(pkg: String) {
+        try {
+            val settings = getSettings() ?: return
+            val todayMin = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
 
-        if (wasTracked && currentForegroundPkg != pkg) {
-            // User left a tracked app — end session and dismiss any overlay immediately.
-            // Without this, the Instagram/Facebook overlay stays visible over every other
-            // app (banking apps, launcher, etc.) because TYPE_APPLICATION_OVERLAY floats
-            // above all windows.
-            endCurrentSession()
-            mainHandler.post { overlayManager.dismissOverlay() }
-        }
+            // 1. Master block
+            val masterBlocked = when {
+                pkg == BlockingRepository.INSTAGRAM_PKG && settings.blockInstagram -> true
+                pkg in setOf(BlockingRepository.FACEBOOK_PKG, BlockingRepository.FACEBOOK_LITE_PKG)
+                    && settings.blockFacebook -> true
+                else -> false
+            }
+            if (masterBlocked) {
+                triggerBlock(pkg, "This app is blocked by Quell", todayMin, snooze = false)
+                return
+            }
 
-        currentForegroundPkg = pkg
-
-        if (!isTracked) return
-
-        serviceScope.launch {
-            try {
-                val settings   = getSettings() ?: return@launch
-                val todayMin   = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-
-                // 1. Master block toggle
-                val masterBlocked = when {
-                    pkg == BlockingRepository.INSTAGRAM_PKG && settings.blockInstagram -> true
-                    pkg in setOf(BlockingRepository.FACEBOOK_PKG, BlockingRepository.FACEBOOK_LITE_PKG)
-                        && settings.blockFacebook -> true
-                    else -> false
+            // 2. Daily time limit
+            if (settings.dailyLimitEnabled) {
+                val limit = if (pkg == BlockingRepository.INSTAGRAM_PKG)
+                    settings.dailyLimitMinutesInstagram else settings.dailyLimitMinutesFacebook
+                if (todayMin >= limit) {
+                    val name = if (pkg == BlockingRepository.INSTAGRAM_PKG) "Instagram" else "Facebook"
+                    triggerBlock(pkg, "Daily limit of ${limit}m reached for $name", todayMin, snooze = false)
+                    return
                 }
-                if (masterBlocked) {
-                    triggerBlock(pkg, "This app is blocked by Quell", todayMin, allowSnooze = false)
-                    return@launch
-                }
+            }
 
-                // 2. Daily limit
-                if (settings.dailyLimitEnabled) {
-                    val limit = if (pkg == BlockingRepository.INSTAGRAM_PKG)
-                        settings.dailyLimitMinutesInstagram else settings.dailyLimitMinutesFacebook
-                    if (todayMin >= limit) {
-                        val name = if (pkg == BlockingRepository.INSTAGRAM_PKG) "Instagram" else "Facebook"
-                        triggerBlock(pkg, "Daily limit of ${limit}m reached for $name",
-                            todayMin, allowSnooze = false)
-                        return@launch
-                    }
-                }
+            // 3. Time lock
+            if (settings.timeLockEnabled && TimeUtils.isCurrentlyInBlockedRange(
+                    settings.timeLockStartHour, settings.timeLockStartMinute,
+                    settings.timeLockEndHour, settings.timeLockEndMinute)) {
+                triggerBlock(pkg, "Blocked between ${TimeUtils.formatTime(settings.timeLockStartHour,
+                    settings.timeLockStartMinute)} and ${TimeUtils.formatTime(settings.timeLockEndHour,
+                    settings.timeLockEndMinute)}", todayMin, snooze = false)
+                return
+            }
 
-                // 3. Time lock
-                if (settings.timeLockEnabled && TimeUtils.isCurrentlyInBlockedRange(
-                        settings.timeLockStartHour, settings.timeLockStartMinute,
-                        settings.timeLockEndHour, settings.timeLockEndMinute)) {
-                    val start = TimeUtils.formatTime(settings.timeLockStartHour, settings.timeLockStartMinute)
-                    val end   = TimeUtils.formatTime(settings.timeLockEndHour, settings.timeLockEndMinute)
-                    triggerBlock(pkg, "Blocked between $start and $end", todayMin, allowSnooze = false)
-                    return@launch
+            // 4. Session limit — check elapsed time; also backed by a scheduled timer
+            if (settings.sessionLimitEnabled && currentSessionId >= 0 && currentSessionPkg == pkg) {
+                val elapsed = TimeUtils.elapsedMinutes(currentSessionStartMs)
+                if (elapsed >= settings.sessionLimitMinutes && !overlayManager.isSnoozed) {
+                    triggerBlock(pkg,
+                        "You've reached your ${settings.sessionLimitMinutes}-minute session limit",
+                        todayMin, snooze = true)
+                    return
                 }
+            }
 
-                // 4. Per-session limit — check elapsed time on each window event as backup
-                if (settings.sessionLimitEnabled && currentSessionId >= 0) {
-                    val elapsed = TimeUtils.elapsedMinutes(currentSessionStartMs)
-                    if (elapsed >= settings.sessionLimitMinutes) {
-                        triggerBlock(pkg,
-                            "You've reached your ${settings.sessionLimitMinutes}-minute session limit",
-                            todayMin, allowSnooze = true)
-                        return@launch
-                    }
-                }
-
-                // 5. Snooze active — skip popup and session start
-                if (overlayManager.isSnoozed) {
-                    if (currentSessionId < 0) startNewSession(pkg)
-                    return@launch
-                }
-
-                // 6. Daily usage popup (once per day)
-                repository.refreshDailyPopupFlags()
-                val showPopup = settings.showUsagePopup && when {
-                    pkg == BlockingRepository.INSTAGRAM_PKG && !settings.popupShownTodayInstagram -> true
-                    pkg in setOf(BlockingRepository.FACEBOOK_PKG, BlockingRepository.FACEBOOK_LITE_PKG)
-                        && !settings.popupShownTodayFacebook -> true
-                    else -> false
-                }
-                if (showPopup) {
-                    repository.markPopupShown(pkg)
-                    mainHandler.post {
-                        overlayManager.showDailyPopup(
-                            packageName  = pkg,
-                            todayMinutes = todayMin,
-                            onContinue   = { serviceScope.launch { startNewSession(pkg) } },
-                            onBlockForToday = {
-                                serviceScope.launch {
-                                    val s = getSettings() ?: return@launch
-                                    repository.saveSettings(
-                                        if (pkg == BlockingRepository.INSTAGRAM_PKG)
-                                            s.copy(blockInstagram = true)
-                                        else s.copy(blockFacebook = true)
-                                    )
-                                    cachedSettings = null
-                                    mainHandler.post { performGlobalAction(GLOBAL_ACTION_HOME) }
-                                }
+            // 5. Daily usage popup
+            repository.refreshDailyPopupFlags()
+            val showPopup = settings.showUsagePopup && when {
+                pkg == BlockingRepository.INSTAGRAM_PKG && !settings.popupShownTodayInstagram -> true
+                pkg in setOf(BlockingRepository.FACEBOOK_PKG, BlockingRepository.FACEBOOK_LITE_PKG)
+                    && !settings.popupShownTodayFacebook -> true
+                else -> false
+            }
+            if (showPopup && !overlayManager.isSnoozed) {
+                repository.markPopupShown(pkg)
+                mainHandler.post {
+                    overlayManager.showDailyPopup(
+                        packageName     = pkg,
+                        todayMinutes    = todayMin,
+                        onContinue      = { serviceScope.launch { ensureSession(pkg, settings) } },
+                        onBlockForToday = {
+                            serviceScope.launch {
+                                val s = getSettings() ?: return@launch
+                                repository.saveSettings(
+                                    if (pkg == BlockingRepository.INSTAGRAM_PKG)
+                                        s.copy(blockInstagram = true)
+                                    else s.copy(blockFacebook = true)
+                                )
+                                cachedSettings = null
+                                mainHandler.post { performGlobalAction(GLOBAL_ACTION_HOME) }
                             }
-                        )
-                    }
-                    return@launch
+                        }
+                    )
                 }
-
-                // 7. Start / continue session
-                if (currentSessionId < 0 || currentForegroundPkg != pkg) {
-                    startNewSession(pkg)
-                }
-
-                // 8. Schedule session-limit timer — only once per session
-                if (settings.sessionLimitEnabled && sessionTimerRunnable == null) {
-                    scheduleSessionLimitCheck(pkg, settings.sessionLimitMinutes)
-                }
-
-            } catch (e: Exception) {
-                Log.e(TAG, "handleWindowStateChanged coroutine error", e)
+                return
             }
+
+            // 6. Start/continue session and schedule limit timer
+            ensureSession(pkg, settings)
+
+        } catch (e: Exception) {
+            Log.e(TAG, "handleAppOpened error", e)
         }
     }
 
     // -------------------------------------------------------------------------
-    // Tab-selection blocking (TYPE_VIEW_SELECTED — precise, no tree scan)
+    // Nav tab click detection — TYPE_VIEW_CLICKED / TYPE_VIEW_SELECTED
     // -------------------------------------------------------------------------
 
     /**
-     * Called when a view becomes selected (e.g. a bottom-nav tab is tapped).
-     * [label] is the lowercase contentDescription or text of the selected view.
-     *
-     * This is far more reliable than scanning the whole accessibility tree because:
-     *  - It fires only when the user actively navigates to a tab.
-     *  - It doesn't require isSelected to be set correctly by the app.
-     *  - It avoids false positives from nav icons that are always in the tree.
+     * Called with the lowercase label of the clicked/selected view.
+     * Instagram and Facebook nav tabs have contentDescriptions like "Reels", "Watch",
+     * "Marketplace", etc. Using event.source directly is more reliable than tree scanning
+     * because it reads exactly what the user tapped, regardless of app version.
      */
-    private fun handleTabSelected(pkg: String, label: String) {
-        serviceScope.launch {
-            try {
-                val settings = getSettings() ?: return@launch
-                val todayMin = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+    private suspend fun handleNavLabel(pkg: String, label: String) {
+        try {
+            val settings = getSettings() ?: return
+            val todayMin by lazy { runBlocking { UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg) } }
 
-                when (pkg) {
-                    BlockingRepository.INSTAGRAM_PKG -> {
-                        if (settings.blockInstagramReels && REELS_HINTS.any { label.contains(it) }) {
-                            triggerBlock(pkg, "Instagram Reels is blocked", todayMin, allowSnooze = false)
-                            return@launch
-                        }
-                        if (settings.blockInstagramExplore && EXPLORE_HINTS.any { label.contains(it) }) {
-                            triggerBlock(pkg, "Instagram Explore is blocked", todayMin, allowSnooze = false)
-                            return@launch
-                        }
+            when (pkg) {
+                BlockingRepository.INSTAGRAM_PKG -> {
+                    if (settings.blockInstagramReels && REELS_LABELS.any { label == it || label.startsWith(it) }) {
+                        triggerBlock(pkg, "Instagram Reels is blocked", todayMin, snooze = false); return
                     }
-                    BlockingRepository.FACEBOOK_PKG,
-                    BlockingRepository.FACEBOOK_LITE_PKG -> {
-                        if (settings.blockFacebookWatch && WATCH_HINTS.any { label.contains(it) }) {
-                            triggerBlock(pkg, "Facebook Watch is blocked", todayMin, allowSnooze = false)
-                            return@launch
-                        }
-                        if (settings.blockFacebookMarketplace && MARKETPLACE_HINTS.any { label.contains(it) }) {
-                            triggerBlock(pkg, "Facebook Marketplace is blocked", todayMin, allowSnooze = false)
-                            return@launch
-                        }
+                    if (settings.blockInstagramExplore && EXPLORE_LABELS.any { label == it || label.contains(it) }) {
+                        triggerBlock(pkg, "Instagram Explore is blocked", todayMin, snooze = false); return
                     }
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "handleTabSelected error", e)
+                BlockingRepository.FACEBOOK_PKG,
+                BlockingRepository.FACEBOOK_LITE_PKG -> {
+                    if (settings.blockFacebookWatch && WATCH_LABELS.any { label == it || label.startsWith(it) }) {
+                        triggerBlock(pkg, "Facebook Watch is blocked", todayMin, snooze = false); return
+                    }
+                    if (settings.blockFacebookMarketplace && MARKETPLACE_LABELS.any { label == it }) {
+                        triggerBlock(pkg, "Facebook Marketplace is blocked", todayMin, snooze = false); return
+                    }
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "handleNavLabel error", e)
         }
     }
 
     // -------------------------------------------------------------------------
-    // Non-tab section blocking (DMs, Gaming — no nav tab, need tree scan)
+    // Non-tab screen detection — tree scan (DMs, Gaming only)
     // -------------------------------------------------------------------------
 
     private suspend fun checkNonTabSections(
         pkg: String,
         settings: BlockingSettings,
-        rootNode: AccessibilityNodeInfo
+        root: AccessibilityNodeInfo
     ) {
         try {
             val todayMin by lazy { runBlocking { UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg) } }
-
             when (pkg) {
                 BlockingRepository.INSTAGRAM_PKG -> {
-                    if (settings.blockInstagramDMs && treeContainsHints(rootNode, DM_HINTS)) {
+                    if (settings.blockInstagramDMs && treeContains(root, DM_HINTS))
                         triggerBlock(pkg, "Instagram Direct Messages are blocked", todayMin, false)
-                    }
                 }
                 BlockingRepository.FACEBOOK_PKG,
                 BlockingRepository.FACEBOOK_LITE_PKG -> {
-                    if (settings.blockFacebookGaming && treeContainsHints(rootNode, GAMING_HINTS)) {
+                    if (settings.blockFacebookGaming && treeContains(root, GAMING_HINTS))
                         triggerBlock(pkg, "Facebook Gaming is blocked", todayMin, false)
-                    }
                 }
             }
         } finally {
-            rootNode.recycle()
+            root.recycle()
         }
     }
 
-    /**
-     * Returns true if any node in the tree has text/contentDescription matching a hint.
-     * Does not require any selection state — used only for non-tab screens (DMs, Gaming)
-     * whose labels won't appear in nav tabs, so false positives are unlikely.
-     */
-    private fun treeContainsHints(root: AccessibilityNodeInfo, hints: Set<String>): Boolean {
+    private fun treeContains(root: AccessibilityNodeInfo, hints: Set<String>): Boolean {
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var found = false
@@ -348,20 +305,20 @@ class BlockingAccessibilityService : AccessibilityService() {
     }
 
     // -------------------------------------------------------------------------
-    // Trigger / overlay
+    // Overlay trigger
     // -------------------------------------------------------------------------
 
-    private fun triggerBlock(pkg: String, reason: String, todayMinutes: Long, allowSnooze: Boolean) {
+    private fun triggerBlock(pkg: String, reason: String, todayMin: Long, snooze: Boolean) {
         mainHandler.post {
             if (overlayManager.isShowing()) return@post
             performGlobalAction(GLOBAL_ACTION_HOME)
             overlayManager.showBlockOverlay(
                 packageName  = pkg,
                 reason       = reason,
-                todayMinutes = todayMinutes,
+                todayMinutes = todayMin,
                 onGoHome     = { performGlobalAction(GLOBAL_ACTION_HOME) },
-                onSnooze     = if (allowSnooze) ({
-                    serviceScope.launch { startNewSession(pkg) }
+                onSnooze     = if (snooze) ({
+                    serviceScope.launch { ensureSession(pkg, null) }
                 }) else null
             )
         }
@@ -371,39 +328,55 @@ class BlockingAccessibilityService : AccessibilityService() {
     // Session tracking
     // -------------------------------------------------------------------------
 
-    private suspend fun startNewSession(pkg: String) {
+    /**
+     * Ensures a session is running for [pkg]. If a session already exists for this pkg,
+     * does nothing (preserving the original start time and timer).
+     * If the pkg changed (user switched tracked apps) the old session is ended first.
+     */
+    private suspend fun ensureSession(pkg: String, settings: BlockingSettings?) {
+        if (currentSessionId >= 0 && currentSessionPkg == pkg) {
+            // Session already running for this app — just make sure the timer is set
+            val s = settings ?: getSettings() ?: return
+            if (s.sessionLimitEnabled && sessionTimerRunnable == null) {
+                scheduleSessionLimitTimer(pkg, s.sessionLimitMinutes)
+            }
+            return
+        }
+        // Either no session running, or a different app's session was active
         endCurrentSession()
         currentSessionId      = repository.startSession(pkg)
         currentSessionStartMs = System.currentTimeMillis()
-        currentForegroundPkg  = pkg
+        currentSessionPkg     = pkg
+        val s = settings ?: getSettings() ?: return
+        if (s.sessionLimitEnabled && sessionTimerRunnable == null) {
+            scheduleSessionLimitTimer(pkg, s.sessionLimitMinutes)
+        }
     }
 
     private fun endCurrentSession() {
         cancelSessionTimer()
         if (currentSessionId >= 0) {
-            val id      = currentSessionId
-            val startMs = currentSessionStartMs
-            val pkg     = currentForegroundPkg
+            val id = currentSessionId; val startMs = currentSessionStartMs; val pkg = currentSessionPkg
             serviceScope.launch { repository.endSessionDirect(id, pkg, startMs) }
-            currentSessionId      = -1L
-            currentSessionStartMs = 0L
+            currentSessionId = -1L; currentSessionStartMs = 0L; currentSessionPkg = ""
         }
     }
 
-    private fun scheduleSessionLimitCheck(pkg: String, limitMinutes: Int) {
+    private fun scheduleSessionLimitTimer(pkg: String, limitMinutes: Int) {
         cancelSessionTimer()
-        val delayMs = limitMinutes * 60_000L
+        val remaining = (limitMinutes * 60_000L) - (System.currentTimeMillis() - currentSessionStartMs)
+        if (remaining <= 0) return  // already over — will be caught on next window event
         sessionTimerRunnable = Runnable {
-            if (currentForegroundPkg == pkg && currentSessionId >= 0) {
+            if (currentSessionPkg == pkg && currentSessionId >= 0 && !overlayManager.isSnoozed) {
                 serviceScope.launch {
-                    val settings = getSettings() ?: return@launch
                     val todayMin = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                    val settings = getSettings() ?: return@launch
                     triggerBlock(pkg,
                         "You've reached your ${settings.sessionLimitMinutes}-minute session limit",
-                        todayMin, allowSnooze = true)
+                        todayMin, snooze = true)
                 }
             }
-        }.also { mainHandler.postDelayed(it, delayMs) }
+        }.also { mainHandler.postDelayed(it, remaining.coerceAtLeast(1000)) }
     }
 
     private fun cancelSessionTimer() {
