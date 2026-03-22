@@ -119,7 +119,7 @@ class BlockingAccessibilityService : AccessibilityService() {
             }
 
             if (isMasterBlocked) {
-                triggerBlock(pkg, "This app is blocked by SocialGuard", todayMinutes, allowSnooze = false)
+                triggerBlock(pkg, "This app is blocked by Quell", todayMinutes, allowSnooze = false)
                 return@launch
             }
 
@@ -200,7 +200,8 @@ class BlockingAccessibilityService : AccessibilityService() {
                                     repository.saveSettings(currentSettings.copy(blockFacebook = true))
                                 }
                                 cachedSettings = null
-                                performGlobalAction(GLOBAL_ACTION_HOME)
+                                // performGlobalAction must run on main thread
+                                mainHandler.post { performGlobalAction(GLOBAL_ACTION_HOME) }
                             }
                         }
                     )
@@ -271,10 +272,12 @@ class BlockingAccessibilityService : AccessibilityService() {
 
     /**
      * Traverses the accessibility node tree looking for any node whose contentDescription or text
-     * matches any of the provided hints. All obtained child nodes are recycled on exit.
+     * matches any of the provided hints.
+     * Every child obtained via getChild() is recycled exactly once — either inline after
+     * processing or in the finally block for nodes still in the queue on early exit.
+     * The [root] node is NOT recycled here; the caller is responsible for it.
      */
     private fun isNodeMatchingHints(root: AccessibilityNodeInfo, hints: Set<String>): Boolean {
-        val toRecycle = mutableListOf<AccessibilityNodeInfo>()
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var found = false
@@ -292,18 +295,15 @@ class BlockingAccessibilityService : AccessibilityService() {
                 }
 
                 for (i in 0 until node.childCount) {
-                    val child = node.getChild(i)
-                    if (child != null) {
-                        queue.add(child)
-                        // Track children for recycling (root is recycled by caller)
-                        if (child !== root) toRecycle.add(child)
-                    }
+                    node.getChild(i)?.let { queue.add(it) }
                 }
+
+                // Recycle the node immediately after processing (root is recycled by the caller)
+                if (node !== root) node.recycle()
             }
         } finally {
-            // Recycle remaining nodes in the queue and any tracked children
-            queue.forEach { if (it !== root) it.recycle() }
-            toRecycle.forEach { runCatching { it.recycle() } }
+            // Recycle any nodes left in the queue on early exit (never processed, never recycled)
+            queue.forEach { if (it !== root) runCatching { it.recycle() } }
         }
         return found
     }
@@ -401,14 +401,14 @@ class BlockingAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        endCurrentSession()
+        if (::repository.isInitialized) endCurrentSession()
     }
 
     override fun onDestroy() {
         super.onDestroy()
         instance = null
-        endCurrentSession()
-        overlayManager.dismissOverlay()
+        if (::repository.isInitialized) endCurrentSession()
+        if (::overlayManager.isInitialized) overlayManager.dismissOverlay()
         serviceScope.cancel()
     }
 }

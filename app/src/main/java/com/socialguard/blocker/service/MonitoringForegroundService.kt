@@ -16,7 +16,7 @@ class MonitoringForegroundService : Service() {
     companion object {
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "quell_monitor"
-        private const val CHANNEL_NAME = "SocialGuard Monitor"
+        private const val CHANNEL_NAME = "Quell Monitor"
     }
 
     override fun onCreate() {
@@ -37,7 +37,7 @@ class MonitoringForegroundService : Service() {
             CHANNEL_NAME,
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Keeps SocialGuard monitoring active"
+            description = "Keeps Quell monitoring active"
             setShowBadge(false)
         }
         val nm = getSystemService(NotificationManager::class.java)
@@ -53,7 +53,7 @@ class MonitoringForegroundService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("SocialGuard Active")
+            .setContentTitle("Quell Active")
             .setContentText("Monitoring Instagram & Facebook usage")
             .setSmallIcon(R.drawable.ic_shield)
             .setContentIntent(openIntent)
