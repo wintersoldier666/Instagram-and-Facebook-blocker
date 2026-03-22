@@ -30,4 +30,7 @@ interface BlockingSettingsDao {
 
     @Query("UPDATE blocking_settings SET popupShownTodayFacebook = :value WHERE id = 1")
     suspend fun setPopupShownFacebook(value: Boolean)
+
+    @Query("UPDATE blocking_settings SET currentStreak = :streak, streakLastDate = :date WHERE id = 1")
+    suspend fun updateStreak(streak: Int, date: String)
 }

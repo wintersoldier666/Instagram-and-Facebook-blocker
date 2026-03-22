@@ -64,6 +64,14 @@ class DashboardFragment : Fragment() {
 
             updateBlockStatusUI(settings.blockInstagram, settings.blockFacebook)
 
+            // Streak badge
+            if (settings.currentStreak > 0) {
+                binding.cardStreak.visibility = View.VISIBLE
+                binding.tvStreakCount.text = settings.currentStreak.toString()
+            } else {
+                binding.cardStreak.visibility = View.GONE
+            }
+
             setupToggles()
         }
 

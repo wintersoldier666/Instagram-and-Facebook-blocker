@@ -33,4 +33,10 @@ class TimeLocksViewModel(application: Application) : AndroidViewModel(applicatio
     fun setSessionLimitEnabled(value: Boolean) = updateSettings { copy(sessionLimitEnabled = value) }
 
     fun setSessionLimitMinutes(minutes: Int) = updateSettings { copy(sessionLimitMinutes = minutes) }
+
+    fun setDailyLimitEnabled(value: Boolean) = updateSettings { copy(dailyLimitEnabled = value) }
+
+    fun setDailyLimitInstagram(minutes: Int) = updateSettings { copy(dailyLimitMinutesInstagram = minutes) }
+
+    fun setDailyLimitFacebook(minutes: Int) = updateSettings { copy(dailyLimitMinutesFacebook = minutes) }
 }

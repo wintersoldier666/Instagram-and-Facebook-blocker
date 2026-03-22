@@ -78,9 +78,13 @@ class BlockingAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 if (pkg in BlockingRepository.TRACKED_PACKAGES) {
+                    // Capture root node HERE on the service/main thread before launching coroutine.
+                    // AccessibilityEvent objects are pooled and recycled after this callback returns,
+                    // so they must not be accessed from a background coroutine.
+                    val rootNode = rootInActiveWindow ?: return
                     serviceScope.launch {
-                        val settings = getSettings() ?: return@launch
-                        checkInAppBlocking(pkg, settings, event)
+                        val settings = getSettings() ?: run { rootNode.recycle(); return@launch }
+                        checkInAppBlocking(pkg, settings, rootNode)
                     }
                 }
             }
@@ -119,7 +123,25 @@ class BlockingAccessibilityService : AccessibilityService() {
                 return@launch
             }
 
-            // 2. Check time lock (scheduled block)
+            // 2. Check daily time limit
+            if (settings.dailyLimitEnabled) {
+                val limit = when {
+                    pkg == BlockingRepository.INSTAGRAM_PKG -> settings.dailyLimitMinutesInstagram
+                    else -> settings.dailyLimitMinutesFacebook
+                }
+                if (todayMinutes >= limit) {
+                    val appName = if (pkg == BlockingRepository.INSTAGRAM_PKG) "Instagram" else "Facebook"
+                    triggerBlock(
+                        pkg,
+                        "Daily limit of ${limit}m reached for $appName",
+                        todayMinutes,
+                        allowSnooze = false
+                    )
+                    return@launch
+                }
+            }
+
+            // 3. Check time lock (scheduled block)
             if (settings.timeLockEnabled && TimeUtils.isCurrentlyInBlockedRange(
                     settings.timeLockStartHour, settings.timeLockStartMinute,
                     settings.timeLockEndHour, settings.timeLockEndMinute
@@ -130,13 +152,13 @@ class BlockingAccessibilityService : AccessibilityService() {
                 return@launch
             }
 
-            // 3. Check session snooze (user tapped "5 more minutes")
+            // 4. Check session snooze (user tapped "5 more minutes")
             if (overlayManager.isSnoozed) {
                 startNewSession(pkg)
                 return@launch
             }
 
-            // 4. Check per-session limit (if session already running and exceeded)
+            // 5. Check per-session limit (if session already running and exceeded)
             if (settings.sessionLimitEnabled && currentSessionId >= 0 && currentForegroundPkg == pkg) {
                 val elapsedMin = TimeUtils.elapsedMinutes(currentSessionStartMs)
                 if (elapsedMin >= settings.sessionLimitMinutes) {
@@ -150,7 +172,7 @@ class BlockingAccessibilityService : AccessibilityService() {
                 }
             }
 
-            // 5. Show daily usage popup (once per day)
+            // 6. Show daily usage popup (once per day)
             val shouldShowPopup = settings.showUsagePopup && when {
                 pkg == BlockingRepository.INSTAGRAM_PKG && !settings.popupShownTodayInstagram -> true
                 (pkg == BlockingRepository.FACEBOOK_PKG || pkg == BlockingRepository.FACEBOOK_LITE_PKG) && !settings.popupShownTodayFacebook -> true
@@ -186,12 +208,12 @@ class BlockingAccessibilityService : AccessibilityService() {
                 return@launch
             }
 
-            // 6. Start new session tracking
+            // 7. Start new session tracking
             if (currentSessionId < 0 || currentForegroundPkg != pkg) {
                 startNewSession(pkg)
             }
 
-            // 7. Schedule session limit check
+            // 8. Schedule session limit check
             if (settings.sessionLimitEnabled) {
                 scheduleSessionLimitCheck(pkg, settings.sessionLimitMinutes)
             }
@@ -199,77 +221,89 @@ class BlockingAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Checks in-app navigation for content that should be blocked (Reels, Marketplace, etc.)
+     * Checks in-app navigation for content that should be blocked (Reels, Marketplace, etc.).
+     * [rootNode] is captured on the service thread before this coroutine launches; caller must
+     * NOT use it after this call since we recycle it here.
      */
     private suspend fun checkInAppBlocking(
         pkg: String,
         settings: BlockingSettings,
-        event: AccessibilityEvent
+        rootNode: AccessibilityNodeInfo
     ) {
-        val rootNode = rootInActiveWindow ?: return
-
-        if (pkg == BlockingRepository.INSTAGRAM_PKG) {
-            if (settings.blockInstagramReels && isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS)) {
-                val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                triggerBlock(pkg, "Instagram Reels is blocked", todayMinutes, allowSnooze = false)
-                return
+        try {
+            if (pkg == BlockingRepository.INSTAGRAM_PKG) {
+                if (settings.blockInstagramReels && isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS)) {
+                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                    triggerBlock(pkg, "Instagram Reels is blocked", todayMinutes, allowSnooze = false)
+                    return
+                }
+                if (settings.blockInstagramExplore && isNodeMatchingHints(rootNode, INSTAGRAM_EXPLORE_HINTS)) {
+                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                    triggerBlock(pkg, "Instagram Explore is blocked", todayMinutes, allowSnooze = false)
+                    return
+                }
+                if (settings.blockInstagramDMs && isNodeMatchingHints(rootNode, INSTAGRAM_DM_HINTS)) {
+                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                    triggerBlock(pkg, "Instagram Direct Messages are blocked", todayMinutes, allowSnooze = false)
+                    return
+                }
+            } else if (pkg == BlockingRepository.FACEBOOK_PKG || pkg == BlockingRepository.FACEBOOK_LITE_PKG) {
+                if (settings.blockFacebookMarketplace && isNodeMatchingHints(rootNode, FACEBOOK_MARKETPLACE_HINTS)) {
+                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                    triggerBlock(pkg, "Facebook Marketplace is blocked", todayMinutes, allowSnooze = false)
+                    return
+                }
+                if (settings.blockFacebookWatch && isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS)) {
+                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                    triggerBlock(pkg, "Facebook Watch is blocked", todayMinutes, allowSnooze = false)
+                    return
+                }
+                if (settings.blockFacebookGaming && isNodeMatchingHints(rootNode, FACEBOOK_GAMING_HINTS)) {
+                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                    triggerBlock(pkg, "Facebook Gaming is blocked", todayMinutes, allowSnooze = false)
+                    return
+                }
             }
-            if (settings.blockInstagramExplore && isNodeMatchingHints(rootNode, INSTAGRAM_EXPLORE_HINTS)) {
-                val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                triggerBlock(pkg, "Instagram Explore is blocked", todayMinutes, allowSnooze = false)
-                return
-            }
-            if (settings.blockInstagramDMs && isNodeMatchingHints(rootNode, INSTAGRAM_DM_HINTS)) {
-                val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                triggerBlock(pkg, "Instagram Direct Messages are blocked", todayMinutes, allowSnooze = false)
-                return
-            }
-        } else if (pkg == BlockingRepository.FACEBOOK_PKG || pkg == BlockingRepository.FACEBOOK_LITE_PKG) {
-            if (settings.blockFacebookMarketplace && isNodeMatchingHints(rootNode, FACEBOOK_MARKETPLACE_HINTS)) {
-                val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                triggerBlock(pkg, "Facebook Marketplace is blocked", todayMinutes, allowSnooze = false)
-                return
-            }
-            if (settings.blockFacebookWatch && isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS)) {
-                val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                triggerBlock(pkg, "Facebook Watch is blocked", todayMinutes, allowSnooze = false)
-                return
-            }
-            if (settings.blockFacebookGaming && isNodeMatchingHints(rootNode, FACEBOOK_GAMING_HINTS)) {
-                val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                triggerBlock(pkg, "Facebook Gaming is blocked", todayMinutes, allowSnooze = false)
-                return
-            }
+        } finally {
+            rootNode.recycle()
         }
-
-        rootNode.recycle()
     }
 
     /**
-     * Traverses accessibility node tree looking for any node whose contentDescription or text
-     * matches any of the provided hints. Focuses on bottom navigation bar nodes.
+     * Traverses the accessibility node tree looking for any node whose contentDescription or text
+     * matches any of the provided hints. All obtained child nodes are recycled on exit.
      */
     private fun isNodeMatchingHints(root: AccessibilityNodeInfo, hints: Set<String>): Boolean {
-        // Check for clicked/focused/selected nodes with matching descriptions
+        val toRecycle = mutableListOf<AccessibilityNodeInfo>()
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var found = false
 
-        outer@ while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            val desc = node.contentDescription?.toString() ?: ""
-            val text = node.text?.toString() ?: ""
+        try {
+            while (queue.isNotEmpty() && !found) {
+                val node = queue.removeFirst()
+                val desc = node.contentDescription?.toString() ?: ""
+                val text = node.text?.toString() ?: ""
 
-            if (hints.any { hint ->
-                    desc.contains(hint, ignoreCase = true) || text.contains(hint, ignoreCase = true)
-                } && (node.isSelected || node.isChecked || node.isFocused || node.isClickable)) {
-                found = true
-                break@outer
-            }
+                if (hints.any { hint ->
+                        desc.contains(hint, ignoreCase = true) || text.contains(hint, ignoreCase = true)
+                    } && (node.isSelected || node.isChecked || node.isFocused || node.isClickable)) {
+                    found = true
+                }
 
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
+                for (i in 0 until node.childCount) {
+                    val child = node.getChild(i)
+                    if (child != null) {
+                        queue.add(child)
+                        // Track children for recycling (root is recycled by caller)
+                        if (child !== root) toRecycle.add(child)
+                    }
+                }
             }
+        } finally {
+            // Recycle remaining nodes in the queue and any tracked children
+            queue.forEach { if (it !== root) it.recycle() }
+            toRecycle.forEach { runCatching { it.recycle() } }
         }
         return found
     }

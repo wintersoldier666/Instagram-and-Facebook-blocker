@@ -32,6 +32,15 @@ data class BlockingSettings(
     val sessionLimitEnabled: Boolean = false,
     val sessionLimitMinutes: Int = 5,
 
+    // Daily time limit (block once total daily usage reaches X minutes)
+    val dailyLimitEnabled: Boolean = false,
+    val dailyLimitMinutesInstagram: Int = 30,
+    val dailyLimitMinutesFacebook: Int = 30,
+
+    // Streak tracking (consecutive days at or under daily limit)
+    val currentStreak: Int = 0,
+    val streakLastDate: String = "",  // "yyyy-MM-dd"
+
     // Daily usage popup
     val showUsagePopup: Boolean = true,
     val popupShownTodayInstagram: Boolean = false,

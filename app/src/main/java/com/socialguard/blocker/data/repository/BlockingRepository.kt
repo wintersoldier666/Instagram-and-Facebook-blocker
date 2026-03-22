@@ -49,6 +49,25 @@ class BlockingRepository(context: Context) {
         }
     }
 
+    /**
+     * Call at the end of a day (or when the date changes) to evaluate and update the streak.
+     * Increments if daily usage was within the limit for both apps; resets otherwise.
+     */
+    suspend fun evaluateAndUpdateStreak(
+        instagramMinutes: Long,
+        facebookMinutes: Long
+    ) = withContext(Dispatchers.IO) {
+        val settings = settingsDao.getSettings() ?: return@withContext
+        if (!settings.dailyLimitEnabled) return@withContext
+        val today = today()
+        if (settings.streakLastDate == today) return@withContext // already evaluated today
+
+        val underLimit = instagramMinutes <= settings.dailyLimitMinutesInstagram &&
+                facebookMinutes <= settings.dailyLimitMinutesFacebook
+        val newStreak = if (underLimit) settings.currentStreak + 1 else 0
+        settingsDao.updateStreak(newStreak, today)
+    }
+
     // Reset daily popup flags if the stored date differs from today
     suspend fun refreshDailyPopupFlags() = withContext(Dispatchers.IO) {
         val settings = settingsDao.getSettings() ?: return@withContext

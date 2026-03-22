@@ -74,14 +74,11 @@ class BlockingOverlayManager(private val context: Context) {
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                // Do NOT include FLAG_NOT_FOCUSABLE — buttons need to receive touch events
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.START
-                // Remove FLAG_NOT_FOCUSABLE so buttons are clickable
-                flags = WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
             }
 
             try {
