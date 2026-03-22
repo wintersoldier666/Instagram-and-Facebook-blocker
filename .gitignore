@@ -18,6 +18,12 @@ local.properties
 !/app/build/outputs/apk/
 !/app/build/outputs/apk/debug/
 !/app/build/outputs/apk/debug/app-debug.apk
+/app/build/generated/
+/app/build/intermediates/
+/app/build/kotlin/
+/app/build/outputs/apk/debug/output-metadata.json
+/app/build/outputs/logs/
+/app/build/tmp/
 
 # Kotlin
 *.class
