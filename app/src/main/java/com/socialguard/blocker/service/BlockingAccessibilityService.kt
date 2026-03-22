@@ -13,6 +13,7 @@ import com.quell.app.overlay.BlockingOverlayManager
 import com.quell.app.util.PermissionHelper
 import com.quell.app.util.TimeUtils
 import com.quell.app.util.UsageStatsHelper
+import android.util.Log
 import kotlinx.coroutines.*
 
 class BlockingAccessibilityService : AccessibilityService() {
@@ -20,7 +21,17 @@ class BlockingAccessibilityService : AccessibilityService() {
     private lateinit var repository: BlockingRepository
     private lateinit var overlayManager: BlockingOverlayManager
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    /**
+     * CoroutineExceptionHandler is required. Without it, ANY uncaught exception thrown inside
+     * a coroutine launched from this scope propagates to the process-level
+     * UncaughtExceptionHandler and crashes the accessibility service.
+     */
+    private val serviceScope = CoroutineScope(
+        Dispatchers.IO + SupervisorJob() +
+                CoroutineExceptionHandler { _, throwable ->
+                    Log.e("QuellService", "Unhandled coroutine exception", throwable)
+                }
+    )
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // Session tracking
@@ -78,12 +89,20 @@ class BlockingAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 if (pkg in BlockingRepository.TRACKED_PACKAGES) {
-                    // Capture root node HERE on the service/main thread before launching coroutine.
-                    // AccessibilityEvent objects are pooled and recycled after this callback returns,
-                    // so they must not be accessed from a background coroutine.
-                    val rootNode = rootInActiveWindow ?: return
+                    // Capture root node on the service thread before launching the coroutine.
+                    // AccessibilityEvent objects are pooled and recycled after this callback
+                    // returns, so they must not be accessed from a background coroutine.
+                    val rootNode = try {
+                        rootInActiveWindow
+                    } catch (e: Exception) {
+                        Log.w("QuellService", "rootInActiveWindow threw", e)
+                        null
+                    } ?: return
                     serviceScope.launch {
-                        val settings = getSettings() ?: run { rootNode.recycle(); return@launch }
+                        val settings = getSettings() ?: run {
+                            runCatching { rootNode.recycle() }
+                            return@launch
+                        }
                         checkInAppBlocking(pkg, settings, rootNode)
                     }
                 }
@@ -108,6 +127,7 @@ class BlockingAccessibilityService : AccessibilityService() {
         currentForegroundPkg = pkg
 
         serviceScope.launch {
+            try {
             val settings = getSettings() ?: return@launch
             val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
 
@@ -217,6 +237,9 @@ class BlockingAccessibilityService : AccessibilityService() {
             // 8. Schedule session limit check
             if (settings.sessionLimitEnabled) {
                 scheduleSessionLimitCheck(pkg, settings.sessionLimitMinutes)
+            }
+            } catch (e: Exception) {
+                Log.e("QuellService", "Error in handleWindowStateChanged coroutine", e)
             }
         }
     }

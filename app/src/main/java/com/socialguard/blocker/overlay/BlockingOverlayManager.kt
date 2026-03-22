@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.PixelFormat
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -135,6 +137,11 @@ class BlockingOverlayManager(private val context: Context) {
     // -------------------------------------------------------------------------
 
     private fun addOverlay(view: View, gravity: Int) {
+        if (!Settings.canDrawOverlays(context)) {
+            Log.e("QuellOverlay", "Cannot show overlay — SYSTEM_ALERT_WINDOW not granted")
+            return
+        }
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -147,7 +154,7 @@ class BlockingOverlayManager(private val context: Context) {
             windowManager.addView(view, params)
             overlayView = view
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("QuellOverlay", "windowManager.addView failed", e)
         }
     }
 
@@ -159,8 +166,8 @@ class BlockingOverlayManager(private val context: Context) {
     }
 
     private fun assertMainThread() {
-        check(Looper.myLooper() == Looper.getMainLooper()) {
-            "showBlockOverlay/showDailyPopup must be called on the main thread"
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            android.util.Log.e("QuellOverlay", "showBlockOverlay/showDailyPopup called off main thread!", Throwable())
         }
     }
 }
