@@ -224,8 +224,12 @@ class BlockingAccessibilityService : AccessibilityService() {
                 startNewSession(pkg)
             }
 
-            // 8. Schedule session limit check
-            if (settings.sessionLimitEnabled) {
+            // 8. Schedule session limit check — only if not already running.
+            // scheduleSessionLimitCheck cancels the previous timer before setting a new one,
+            // so calling it on every window-state change (e.g. navigation within the app)
+            // would reset the clock each time. We guard with sessionTimerRunnable == null
+            // so the timer is only set once when the session starts.
+            if (settings.sessionLimitEnabled && sessionTimerRunnable == null) {
                 scheduleSessionLimitCheck(pkg, settings.sessionLimitMinutes)
             }
             } catch (e: Exception) {
@@ -246,33 +250,38 @@ class BlockingAccessibilityService : AccessibilityService() {
     ) {
         try {
             if (pkg == BlockingRepository.INSTAGRAM_PKG) {
-                if (settings.blockInstagramReels && isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS)) {
+                // Reels and Explore are bottom-nav tabs → requireSelected=true prevents
+                // false matches from the nav bar icons that are always in the view tree
+                if (settings.blockInstagramReels && isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS, requireSelected = true)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Instagram Reels is blocked", todayMinutes, allowSnooze = false)
                     return
                 }
-                if (settings.blockInstagramExplore && isNodeMatchingHints(rootNode, INSTAGRAM_EXPLORE_HINTS)) {
+                if (settings.blockInstagramExplore && isNodeMatchingHints(rootNode, INSTAGRAM_EXPLORE_HINTS, requireSelected = true)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Instagram Explore is blocked", todayMinutes, allowSnooze = false)
                     return
                 }
-                if (settings.blockInstagramDMs && isNodeMatchingHints(rootNode, INSTAGRAM_DM_HINTS)) {
+                // DMs have no nav tab — match on screen content alone
+                if (settings.blockInstagramDMs && isNodeMatchingHints(rootNode, INSTAGRAM_DM_HINTS, requireSelected = false)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Instagram Direct Messages are blocked", todayMinutes, allowSnooze = false)
                     return
                 }
             } else if (pkg == BlockingRepository.FACEBOOK_PKG || pkg == BlockingRepository.FACEBOOK_LITE_PKG) {
-                if (settings.blockFacebookMarketplace && isNodeMatchingHints(rootNode, FACEBOOK_MARKETPLACE_HINTS)) {
+                // Marketplace and Watch are bottom-nav tabs → requireSelected=true
+                if (settings.blockFacebookMarketplace && isNodeMatchingHints(rootNode, FACEBOOK_MARKETPLACE_HINTS, requireSelected = true)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Facebook Marketplace is blocked", todayMinutes, allowSnooze = false)
                     return
                 }
-                if (settings.blockFacebookWatch && isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS)) {
+                if (settings.blockFacebookWatch && isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS, requireSelected = true)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Facebook Watch is blocked", todayMinutes, allowSnooze = false)
                     return
                 }
-                if (settings.blockFacebookGaming && isNodeMatchingHints(rootNode, FACEBOOK_GAMING_HINTS)) {
+                // Gaming is in a side menu, not a dedicated nav tab → requireSelected=false
+                if (settings.blockFacebookGaming && isNodeMatchingHints(rootNode, FACEBOOK_GAMING_HINTS, requireSelected = false)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Facebook Gaming is blocked", todayMinutes, allowSnooze = false)
                     return
@@ -286,11 +295,24 @@ class BlockingAccessibilityService : AccessibilityService() {
     /**
      * Traverses the accessibility node tree looking for any node whose contentDescription or text
      * matches any of the provided hints.
+     *
+     * [requireSelected] = true (default): the matching node must be selected or checked.
+     *   Use this for tab-based sections (Reels, Explore, Watch, Marketplace, Gaming) because
+     *   nav-bar tab icons are ALWAYS present in the tree and always clickable — requiring
+     *   isSelected ensures we only match when the user is actually on that tab.
+     *
+     * [requireSelected] = false: match on text/description alone.
+     *   Use this for screen-based sections (DMs, Gaming menus) that have no nav-bar tab.
+     *
      * Every child obtained via getChild() is recycled exactly once — either inline after
      * processing or in the finally block for nodes still in the queue on early exit.
      * The [root] node is NOT recycled here; the caller is responsible for it.
      */
-    private fun isNodeMatchingHints(root: AccessibilityNodeInfo, hints: Set<String>): Boolean {
+    private fun isNodeMatchingHints(
+        root: AccessibilityNodeInfo,
+        hints: Set<String>,
+        requireSelected: Boolean = true
+    ): Boolean {
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var found = false
@@ -301,9 +323,12 @@ class BlockingAccessibilityService : AccessibilityService() {
                 val desc = node.contentDescription?.toString() ?: ""
                 val text = node.text?.toString() ?: ""
 
-                if (hints.any { hint ->
-                        desc.contains(hint, ignoreCase = true) || text.contains(hint, ignoreCase = true)
-                    } && (node.isSelected || node.isChecked || node.isFocused || node.isClickable)) {
+                val textMatches = hints.any { hint ->
+                    desc.contains(hint, ignoreCase = true) || text.contains(hint, ignoreCase = true)
+                }
+                val stateOk = !requireSelected || node.isSelected || node.isChecked
+
+                if (textMatches && stateOk) {
                     found = true
                 }
 
