@@ -2,9 +2,7 @@ package com.quell.app.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
-import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -77,39 +75,82 @@ class BlockingAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
 
         when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                handleWindowStateChanged(pkg)
-                // Also run in-app section check immediately on navigation events so that
-                // section blocking (Reels, Watch, etc.) fires the instant the user taps
-                // the tab — don't wait for the first content-change event on the new screen.
-                if (pkg in BlockingRepository.TRACKED_PACKAGES) {
-                    val rootNode = try { rootInActiveWindow } catch (e: Exception) { null } ?: return
-                    serviceScope.launch {
-                        val settings = getSettings() ?: run { runCatching { rootNode.recycle() }; return@launch }
-                        checkInAppBlocking(pkg, settings, rootNode)
-                    }
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> handleWindowStateChanged(pkg)
+
+            // TYPE_VIEW_SELECTED fires when a bottom-nav tab becomes selected — this is the
+            // most reliable way to detect section navigation. The event carries the tab label
+            // directly, so no tree scan is needed. No false positives.
+            AccessibilityEvent.TYPE_VIEW_SELECTED -> {
+                if (pkg !in BlockingRepository.TRACKED_PACKAGES) return
+                val label = buildString {
+                    event.contentDescription?.let { append(it) }
+                    event.text?.forEach { append(" $it") }
+                }.trim().lowercase()
+                if (label.isEmpty()) return
+                serviceScope.launch {
+                    val settings = getSettings() ?: return@launch
+                    checkTabSelected(pkg, label, settings)
                 }
             }
+
+            // Content/click events: only scan for non-tab sections (DMs, Gaming)
+            // that don't have a dedicated nav tab to select.
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                if (pkg in BlockingRepository.TRACKED_PACKAGES) {
-                    // Capture root node on the service thread before launching the coroutine.
-                    // AccessibilityEvent objects are pooled and recycled after this callback
-                    // returns, so they must not be accessed from a background coroutine.
-                    val rootNode = try {
-                        rootInActiveWindow
-                    } catch (e: Exception) {
-                        Log.w("QuellService", "rootInActiveWindow threw", e)
-                        null
-                    } ?: return
-                    serviceScope.launch {
-                        val settings = getSettings() ?: run {
-                            runCatching { rootNode.recycle() }
-                            return@launch
-                        }
-                        checkInAppBlocking(pkg, settings, rootNode)
+                if (pkg !in BlockingRepository.TRACKED_PACKAGES) return
+                val needsDmCheck = pkg == BlockingRepository.INSTAGRAM_PKG
+                val needsGamingCheck = pkg == BlockingRepository.FACEBOOK_PKG ||
+                        pkg == BlockingRepository.FACEBOOK_LITE_PKG
+                if (!needsDmCheck && !needsGamingCheck) return
+
+                val rootNode = try {
+                    rootInActiveWindow
+                } catch (e: Exception) {
+                    Log.w("QuellService", "rootInActiveWindow threw", e)
+                    null
+                } ?: return
+                serviceScope.launch {
+                    val settings = getSettings() ?: run {
+                        runCatching { rootNode.recycle() }
+                        return@launch
                     }
+                    checkNonTabSections(pkg, settings, rootNode)
                 }
+            }
+        }
+    }
+
+    /**
+     * Called when a TYPE_VIEW_SELECTED event fires for a tracked app.
+     * The [label] is the lowercased contentDescription/text of the selected view —
+     * for bottom-nav tabs this is the tab title ("reels", "watch", "explore", etc.).
+     * This approach is reliable across app versions and requires no tree scan.
+     */
+    private suspend fun checkTabSelected(pkg: String, label: String, settings: BlockingSettings) {
+        val todayMinutes by lazy {
+            UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+        }
+        if (pkg == BlockingRepository.INSTAGRAM_PKG) {
+            if (settings.blockInstagramReels &&
+                INSTAGRAM_REELS_HINTS.any { label.contains(it, ignoreCase = true) }) {
+                triggerBlock(pkg, "Instagram Reels is blocked", todayMinutes, allowSnooze = false)
+                return
+            }
+            if (settings.blockInstagramExplore &&
+                INSTAGRAM_EXPLORE_HINTS.any { label.contains(it, ignoreCase = true) }) {
+                triggerBlock(pkg, "Instagram Explore is blocked", todayMinutes, allowSnooze = false)
+                return
+            }
+        } else if (pkg == BlockingRepository.FACEBOOK_PKG || pkg == BlockingRepository.FACEBOOK_LITE_PKG) {
+            if (settings.blockFacebookWatch &&
+                FACEBOOK_WATCH_HINTS.any { label.contains(it, ignoreCase = true) }) {
+                triggerBlock(pkg, "Facebook Watch is blocked", todayMinutes, allowSnooze = false)
+                return
+            }
+            if (settings.blockFacebookMarketplace &&
+                FACEBOOK_MARKETPLACE_HINTS.any { label.contains(it, ignoreCase = true) }) {
+                triggerBlock(pkg, "Facebook Marketplace is blocked", todayMinutes, allowSnooze = false)
+                return
             }
         }
     }
@@ -253,74 +294,41 @@ class BlockingAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Checks in-app navigation for content that should be blocked (Reels, Marketplace, etc.).
-     * [rootNode] is captured on the service thread before this coroutine launches; caller must
-     * NOT use it after this call since we recycle it here.
+     * Checks only the sections that have NO dedicated bottom-nav tab:
+     *  - Instagram DMs  (opened via the inbox icon in the top bar)
+     *  - Facebook Gaming (buried in a side menu)
      *
-     * Detection strategy:
-     *  - Video sections (Reels, Watch): audio-first detection.
-     *    isAppPlayingAudio() is the primary signal because Reels/Watch always play audio,
-     *    and this works regardless of how Instagram/Facebook versions implement their nav bar.
-     *    isSelected on the nav tab is kept as a fallback for when the phone is muted.
-     *  - Non-video sections (Explore, DMs, Marketplace, Gaming): accessibility-only.
+     * Tab-based sections (Reels, Explore, Watch, Marketplace) are detected via
+     * TYPE_VIEW_SELECTED events in checkTabSelected() — no tree scan required.
+     *
+     * Uses findAccessibilityNodeInfosByText() which is O(n) but only called on
+     * CONTENT_CHANGED / VIEW_CLICKED, not on every event.
      */
-    private suspend fun checkInAppBlocking(
+    private suspend fun checkNonTabSections(
         pkg: String,
         settings: BlockingSettings,
         rootNode: AccessibilityNodeInfo
     ) {
         try {
-            val audioPlaying = isAudioPlaying()
-
-            if (pkg == BlockingRepository.INSTAGRAM_PKG) {
-                // Reels detection — two complementary signals:
-                //  1. Audio playing + any Reels hint in tree (requireSelected=false):
-                //     Catches auto-playing Reels even if the nav tab doesn't report isSelected.
-                //     Audio is the gate here so "Reels" text on nav icon won't false-trigger
-                //     (nav icon audio is silent).
-                //  2. Reels tab isSelected without audio (muted phone fallback).
-                if (settings.blockInstagramReels) {
-                    val reelsHintAny = isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS, requireSelected = false)
-                    val reelsTabSelected = isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS, requireSelected = true)
-                    val onReels = (audioPlaying && reelsHintAny) || reelsTabSelected
-                    if (onReels) {
-                        val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                        triggerBlock(pkg, "Instagram Reels is blocked", todayMinutes, allowSnooze = false)
-                        return
-                    }
-                }
-                // Explore: no video audio — rely on isSelected
-                if (settings.blockInstagramExplore && isNodeMatchingHints(rootNode, INSTAGRAM_EXPLORE_HINTS, requireSelected = true)) {
-                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                    triggerBlock(pkg, "Instagram Explore is blocked", todayMinutes, allowSnooze = false)
-                    return
-                }
-                // DMs: no nav tab — match on screen content alone
-                if (settings.blockInstagramDMs && isNodeMatchingHints(rootNode, INSTAGRAM_DM_HINTS, requireSelected = false)) {
+            if (pkg == BlockingRepository.INSTAGRAM_PKG && settings.blockInstagramDMs) {
+                // "Direct" is specific enough to the DM inbox — it doesn't appear in the feed
+                val nodes = rootNode.findAccessibilityNodeInfosByText("Direct")
+                val found = nodes.isNotEmpty()
+                nodes.forEach { runCatching { it.recycle() } }
+                if (found) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Instagram Direct Messages are blocked", todayMinutes, allowSnooze = false)
                     return
                 }
-            } else if (pkg == BlockingRepository.FACEBOOK_PKG || pkg == BlockingRepository.FACEBOOK_LITE_PKG) {
-                // Watch: same dual-signal logic as Reels
-                if (settings.blockFacebookWatch) {
-                    val watchHintAny = isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS, requireSelected = false)
-                    val watchTabSelected = isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS, requireSelected = true)
-                    val onWatch = (audioPlaying && watchHintAny) || watchTabSelected
-                    if (onWatch) {
-                        val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                        triggerBlock(pkg, "Facebook Watch is blocked", todayMinutes, allowSnooze = false)
-                        return
-                    }
-                }
-                // Marketplace: no video — rely on isSelected
-                if (settings.blockFacebookMarketplace && isNodeMatchingHints(rootNode, FACEBOOK_MARKETPLACE_HINTS, requireSelected = true)) {
-                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                    triggerBlock(pkg, "Facebook Marketplace is blocked", todayMinutes, allowSnooze = false)
-                    return
-                }
-                // Gaming: side menu, no nav tab → requireSelected=false
-                if (settings.blockFacebookGaming && isNodeMatchingHints(rootNode, FACEBOOK_GAMING_HINTS, requireSelected = false)) {
+            }
+
+            val isFacebook = pkg == BlockingRepository.FACEBOOK_PKG ||
+                    pkg == BlockingRepository.FACEBOOK_LITE_PKG
+            if (isFacebook && settings.blockFacebookGaming) {
+                val nodes = rootNode.findAccessibilityNodeInfosByText("Gaming")
+                val found = nodes.isNotEmpty()
+                nodes.forEach { runCatching { it.recycle() } }
+                if (found) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Facebook Gaming is blocked", todayMinutes, allowSnooze = false)
                     return
@@ -329,80 +337,6 @@ class BlockingAccessibilityService : AccessibilityService() {
         } finally {
             rootNode.recycle()
         }
-    }
-
-    /**
-     * Returns true if audio is currently playing on the device.
-     *
-     * AudioPlaybackConfiguration.getClientUid() is @hide and not in the public SDK stubs,
-     * so we use AudioManager.isMusicActive() which is always public.
-     * This is imprecise (any app's audio counts), but we only call this when the target
-     * app is already confirmed to be in the foreground via the accessibility event, so
-     * false positives (background music from Spotify etc.) are the only risk — mitigated
-     * by also requiring accessibility hints in the caller.
-     */
-    private fun isAudioPlaying(): Boolean {
-        return try {
-            val audioManager = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.isMusicActive
-        } catch (e: Exception) {
-            Log.w("QuellService", "isAudioPlaying failed", e)
-            false
-        }
-    }
-
-    /**
-     * Traverses the accessibility node tree looking for any node whose contentDescription or text
-     * matches any of the provided hints.
-     *
-     * [requireSelected] = true (default): the matching node must be selected or checked.
-     *   Use this for tab-based sections (Reels, Explore, Watch, Marketplace, Gaming) because
-     *   nav-bar tab icons are ALWAYS present in the tree and always clickable — requiring
-     *   isSelected ensures we only match when the user is actually on that tab.
-     *
-     * [requireSelected] = false: match on text/description alone.
-     *   Use this for screen-based sections (DMs, Gaming menus) that have no nav-bar tab.
-     *
-     * Every child obtained via getChild() is recycled exactly once — either inline after
-     * processing or in the finally block for nodes still in the queue on early exit.
-     * The [root] node is NOT recycled here; the caller is responsible for it.
-     */
-    private fun isNodeMatchingHints(
-        root: AccessibilityNodeInfo,
-        hints: Set<String>,
-        requireSelected: Boolean = true
-    ): Boolean {
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        queue.add(root)
-        var found = false
-
-        try {
-            while (queue.isNotEmpty() && !found) {
-                val node = queue.removeFirst()
-                val desc = node.contentDescription?.toString() ?: ""
-                val text = node.text?.toString() ?: ""
-
-                val textMatches = hints.any { hint ->
-                    desc.contains(hint, ignoreCase = true) || text.contains(hint, ignoreCase = true)
-                }
-                val stateOk = !requireSelected || node.isSelected || node.isChecked
-
-                if (textMatches && stateOk) {
-                    found = true
-                }
-
-                for (i in 0 until node.childCount) {
-                    node.getChild(i)?.let { queue.add(it) }
-                }
-
-                // Recycle the node immediately after processing (root is recycled by the caller)
-                if (node !== root) node.recycle()
-            }
-        } finally {
-            // Recycle any nodes left in the queue on early exit (never processed, never recycled)
-            queue.forEach { if (it !== root) runCatching { it.recycle() } }
-        }
-        return found
     }
 
     private fun triggerBlock(
