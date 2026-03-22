@@ -1,4 +1,4 @@
-package com.socialguard.blocker
+package com.quell.app
 
 import android.content.Intent
 import android.os.Build
@@ -8,9 +8,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
-import com.socialguard.blocker.databinding.ActivityMainBinding
-import com.socialguard.blocker.service.MonitoringForegroundService
-import com.socialguard.blocker.util.PermissionHelper
+import com.quell.app.databinding.ActivityMainBinding
+import com.quell.app.service.MonitoringForegroundService
+import com.quell.app.util.PermissionHelper
 
 class MainActivity : AppCompatActivity() {
 

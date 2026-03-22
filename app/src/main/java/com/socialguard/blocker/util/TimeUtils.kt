@@ -1,4 +1,4 @@
-package com.socialguard.blocker.util
+package com.quell.app.util
 
 import java.util.*
 import java.util.concurrent.TimeUnit

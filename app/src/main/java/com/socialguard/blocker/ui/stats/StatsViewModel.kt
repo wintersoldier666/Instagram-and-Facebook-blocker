@@ -1,9 +1,9 @@
-package com.socialguard.blocker.ui.stats
+package com.quell.app.ui.stats
 
 import android.app.Application
 import androidx.lifecycle.*
-import com.socialguard.blocker.data.repository.BlockingRepository
-import com.socialguard.blocker.util.UsageStatsHelper
+import com.quell.app.data.repository.BlockingRepository
+import com.quell.app.util.UsageStatsHelper
 import kotlinx.coroutines.launch
 
 data class AppStats(

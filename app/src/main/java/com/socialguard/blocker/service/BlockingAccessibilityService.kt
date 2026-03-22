@@ -1,4 +1,4 @@
-package com.socialguard.blocker.service
+package com.quell.app.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
@@ -7,12 +7,12 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import com.socialguard.blocker.data.model.BlockingSettings
-import com.socialguard.blocker.data.repository.BlockingRepository
-import com.socialguard.blocker.overlay.BlockingOverlayManager
-import com.socialguard.blocker.util.PermissionHelper
-import com.socialguard.blocker.util.TimeUtils
-import com.socialguard.blocker.util.UsageStatsHelper
+import com.quell.app.data.model.BlockingSettings
+import com.quell.app.data.repository.BlockingRepository
+import com.quell.app.overlay.BlockingOverlayManager
+import com.quell.app.util.PermissionHelper
+import com.quell.app.util.TimeUtils
+import com.quell.app.util.UsageStatsHelper
 import kotlinx.coroutines.*
 
 class BlockingAccessibilityService : AccessibilityService() {

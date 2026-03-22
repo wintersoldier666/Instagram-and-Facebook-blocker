@@ -1,11 +1,11 @@
-package com.socialguard.blocker.data.repository
+package com.quell.app.data.repository
 
 import android.content.Context
 import androidx.lifecycle.LiveData
-import com.socialguard.blocker.data.database.AppDatabase
-import com.socialguard.blocker.data.model.BlockingSettings
-import com.socialguard.blocker.data.model.SessionRecord
-import com.socialguard.blocker.data.model.UsageRecord
+import com.quell.app.data.database.AppDatabase
+import com.quell.app.data.model.BlockingSettings
+import com.quell.app.data.model.SessionRecord
+import com.quell.app.data.model.UsageRecord
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat

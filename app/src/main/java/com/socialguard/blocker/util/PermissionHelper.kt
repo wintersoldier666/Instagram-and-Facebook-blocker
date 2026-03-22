@@ -1,4 +1,4 @@
-package com.socialguard.blocker.util
+package com.quell.app.util
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context

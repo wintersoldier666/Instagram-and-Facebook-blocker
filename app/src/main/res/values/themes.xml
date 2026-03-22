@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.SocialGuard" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="Theme.Quell" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
         <item name="colorPrimaryVariant">@color/primary_variant</item>
         <item name="colorOnPrimary">@color/on_primary</item>
@@ -13,10 +13,10 @@
         <item name="android:navigationBarColor">@color/surface</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
         <item name="android:textColorSecondary">@color/text_secondary</item>
-        <item name="switchStyle">@style/SocialGuardSwitch</item>
+        <item name="switchStyle">@style/QuellSwitch</item>
     </style>
 
-    <style name="SocialGuardSwitch" parent="Widget.Material3.CompoundButton.Switch">
+    <style name="QuellSwitch" parent="Widget.Material3.CompoundButton.Switch">
         <item name="thumbTint">@color/switch_thumb_color</item>
         <item name="trackTint">@color/switch_track_color</item>
     </style>

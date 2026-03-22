@@ -1,10 +1,10 @@
-package com.socialguard.blocker.ui.settings
+package com.quell.app.ui.settings
 
 import android.app.Application
 import androidx.lifecycle.*
-import com.socialguard.blocker.data.model.BlockingSettings
-import com.socialguard.blocker.data.repository.BlockingRepository
-import com.socialguard.blocker.service.BlockingAccessibilityService
+import com.quell.app.data.model.BlockingSettings
+import com.quell.app.data.repository.BlockingRepository
+import com.quell.app.service.BlockingAccessibilityService
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {

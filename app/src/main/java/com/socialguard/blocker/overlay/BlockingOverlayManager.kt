@@ -1,4 +1,4 @@
-package com.socialguard.blocker.overlay
+package com.quell.app.overlay
 
 import android.content.Context
 import android.graphics.Color
@@ -11,9 +11,9 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.TextView
-import com.socialguard.blocker.R
-import com.socialguard.blocker.util.QuotesProvider
-import com.socialguard.blocker.util.TimeUtils
+import com.quell.app.R
+import com.quell.app.util.QuotesProvider
+import com.quell.app.util.TimeUtils
 
 class BlockingOverlayManager(private val context: Context) {
 

@@ -1,4 +1,4 @@
-package com.socialguard.blocker.util
+package com.quell.app.util
 
 object QuotesProvider {
 

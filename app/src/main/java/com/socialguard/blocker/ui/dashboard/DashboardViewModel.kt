@@ -1,10 +1,10 @@
-package com.socialguard.blocker.ui.dashboard
+package com.quell.app.ui.dashboard
 
 import android.app.Application
 import androidx.lifecycle.*
-import com.socialguard.blocker.data.model.BlockingSettings
-import com.socialguard.blocker.data.repository.BlockingRepository
-import com.socialguard.blocker.util.UsageStatsHelper
+import com.quell.app.data.model.BlockingSettings
+import com.quell.app.data.repository.BlockingRepository
+import com.quell.app.util.UsageStatsHelper
 import kotlinx.coroutines.launch
 
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
@@ -43,6 +43,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun invalidateAccessibilityCache() {
-        com.socialguard.blocker.service.BlockingAccessibilityService.instance?.invalidateSettingsCache()
+        com.quell.app.service.BlockingAccessibilityService.instance?.invalidateSettingsCache()
     }
 }

@@ -1,4 +1,4 @@
-package com.socialguard.blocker.data.database
+package com.quell.app.data.database
 
 import android.content.Context
 import androidx.room.Database
@@ -6,12 +6,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.socialguard.blocker.data.database.dao.BlockingSettingsDao
-import com.socialguard.blocker.data.database.dao.SessionRecordDao
-import com.socialguard.blocker.data.database.dao.UsageRecordDao
-import com.socialguard.blocker.data.model.BlockingSettings
-import com.socialguard.blocker.data.model.SessionRecord
-import com.socialguard.blocker.data.model.UsageRecord
+import com.quell.app.data.database.dao.BlockingSettingsDao
+import com.quell.app.data.database.dao.SessionRecordDao
+import com.quell.app.data.database.dao.UsageRecordDao
+import com.quell.app.data.model.BlockingSettings
+import com.quell.app.data.model.SessionRecord
+import com.quell.app.data.model.UsageRecord
 
 @Database(
     entities = [BlockingSettings::class, UsageRecord::class, SessionRecord::class],
@@ -44,7 +44,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "social_guard.db"
+                    "quell.db"
                 )
                     .addMigrations(MIGRATION_1_2)
                     .addCallback(object : Callback() {

@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.socialguard.blocker"
+    namespace = "com.quell.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.socialguard.blocker"
+        applicationId = "com.quell.app"
         minSdk = 24
         targetSdk = 34
         versionCode = 1

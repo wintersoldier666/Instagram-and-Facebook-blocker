@@ -1,9 +1,9 @@
-package com.socialguard.blocker
+package com.quell.app
 
 import android.app.Application
-import com.socialguard.blocker.data.database.AppDatabase
+import com.quell.app.data.database.AppDatabase
 
-class SocialGuardApp : Application() {
+class QuellApp : Application() {
 
     override fun onCreate() {
         super.onCreate()

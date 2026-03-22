@@ -1,10 +1,10 @@
-package com.socialguard.blocker.receiver
+package com.quell.app.receiver
 
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import com.socialguard.blocker.service.MonitoringForegroundService
-import com.socialguard.blocker.util.PermissionHelper
+import com.quell.app.service.MonitoringForegroundService
+import com.quell.app.util.PermissionHelper
 
 class BootReceiver : BroadcastReceiver() {
 

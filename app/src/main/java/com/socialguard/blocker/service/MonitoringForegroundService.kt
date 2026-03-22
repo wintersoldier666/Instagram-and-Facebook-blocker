@@ -1,4 +1,4 @@
-package com.socialguard.blocker.service
+package com.quell.app.service
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -8,14 +8,14 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.socialguard.blocker.MainActivity
-import com.socialguard.blocker.R
+import com.quell.app.MainActivity
+import com.quell.app.R
 
 class MonitoringForegroundService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 1001
-        private const val CHANNEL_ID = "social_guard_monitor"
+        private const val CHANNEL_ID = "quell_monitor"
         private const val CHANNEL_NAME = "SocialGuard Monitor"
     }
 

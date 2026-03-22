@@ -1,8 +1,8 @@
-package com.socialguard.blocker.data.database.dao
+package com.quell.app.data.database.dao
 
 import androidx.lifecycle.LiveData
 import androidx.room.*
-import com.socialguard.blocker.data.model.UsageRecord
+import com.quell.app.data.model.UsageRecord
 
 @Dao
 interface UsageRecordDao {

@@ -1,4 +1,4 @@
-package com.socialguard.blocker.ui.dashboard
+package com.quell.app.ui.dashboard
 
 import android.content.Intent
 import android.os.Bundle
@@ -7,9 +7,9 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
-import com.socialguard.blocker.databinding.FragmentDashboardBinding
-import com.socialguard.blocker.util.PermissionHelper
-import com.socialguard.blocker.util.TimeUtils
+import com.quell.app.databinding.FragmentDashboardBinding
+import com.quell.app.util.PermissionHelper
+import com.quell.app.util.TimeUtils
 
 class DashboardFragment : Fragment() {
 

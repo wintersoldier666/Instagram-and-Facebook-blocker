@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SocialGuard</string>
+    <string name="app_name">Quell</string>
     <string name="app_description">Take back control of your screen time</string>
 
     <!-- Navigation -->
@@ -10,7 +10,7 @@
     <string name="nav_stats">Stats</string>
 
     <!-- Blocking -->
-    <string name="blocked_message">This app is blocked by SocialGuard</string>
+    <string name="blocked_message">This app is blocked by Quell</string>
     <string name="btn_go_home">Go Back Home</string>
     <string name="btn_snooze">Allow 5 more minutes</string>
 
@@ -23,10 +23,10 @@
     <string name="perm_usage_desc">Required to track screen time</string>
 
     <!-- Notification -->
-    <string name="notification_title">SocialGuard Active</string>
+    <string name="notification_title">Quell Active</string>
     <string name="notification_text">Monitoring Instagram and Facebook usage</string>
 
     <!-- Accessibility Service -->
-    <string name="accessibility_service_description">SocialGuard monitors foreground apps to block Instagram and Facebook based on your settings. It reads app names and navigation elements to enforce content restrictions.</string>
+    <string name="accessibility_service_description">Quell monitors foreground apps to block Instagram and Facebook based on your settings. It reads app names and navigation elements to enforce content restrictions.</string>
     <string name="sample_quote">Your attention is your most valuable resource.</string>
 </resources>

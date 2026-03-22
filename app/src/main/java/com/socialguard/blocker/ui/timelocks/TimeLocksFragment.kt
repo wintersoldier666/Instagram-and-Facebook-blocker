@@ -1,4 +1,4 @@
-package com.socialguard.blocker.ui.timelocks
+package com.quell.app.ui.timelocks
 
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -9,8 +9,8 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.google.android.material.timepicker.MaterialTimePicker
 import com.google.android.material.timepicker.TimeFormat
-import com.socialguard.blocker.databinding.FragmentTimelocksBinding
-import com.socialguard.blocker.util.TimeUtils
+import com.quell.app.databinding.FragmentTimelocksBinding
+import com.quell.app.util.TimeUtils
 
 private const val SEEK_DAILY_MIN = 5
 

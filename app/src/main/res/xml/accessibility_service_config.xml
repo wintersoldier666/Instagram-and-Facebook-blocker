@@ -7,4 +7,4 @@
     android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
     android:notificationTimeout="100"
-    android:settingsActivity="com.socialguard.blocker.MainActivity" />
+    android:settingsActivity="com.quell.app.MainActivity" />

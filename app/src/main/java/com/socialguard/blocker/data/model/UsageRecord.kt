@@ -1,4 +1,4 @@
-package com.socialguard.blocker.data.model
+package com.quell.app.data.model
 
 import androidx.room.Entity
 import androidx.room.Index

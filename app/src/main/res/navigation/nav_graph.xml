@@ -7,25 +7,25 @@
 
     <fragment
         android:id="@+id/dashboardFragment"
-        android:name="com.socialguard.blocker.ui.dashboard.DashboardFragment"
+        android:name="com.quell.app.ui.dashboard.DashboardFragment"
         android:label="Dashboard"
         tools:layout="@layout/fragment_dashboard" />
 
     <fragment
         android:id="@+id/settingsFragment"
-        android:name="com.socialguard.blocker.ui.settings.SettingsFragment"
+        android:name="com.quell.app.ui.settings.SettingsFragment"
         android:label="Content Locks"
         tools:layout="@layout/fragment_settings" />
 
     <fragment
         android:id="@+id/timeLocksFragment"
-        android:name="com.socialguard.blocker.ui.timelocks.TimeLocksFragment"
+        android:name="com.quell.app.ui.timelocks.TimeLocksFragment"
         android:label="Time Locks"
         tools:layout="@layout/fragment_timelocks" />
 
     <fragment
         android:id="@+id/statsFragment"
-        android:name="com.socialguard.blocker.ui.stats.StatsFragment"
+        android:name="com.quell.app.ui.stats.StatsFragment"
         android:label="Stats"
         tools:layout="@layout/fragment_stats" />
 

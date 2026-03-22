@@ -1,8 +1,8 @@
-package com.socialguard.blocker.data.database.dao
+package com.quell.app.data.database.dao
 
 import androidx.lifecycle.LiveData
 import androidx.room.*
-import com.socialguard.blocker.data.model.BlockingSettings
+import com.quell.app.data.model.BlockingSettings
 
 @Dao
 interface BlockingSettingsDao {

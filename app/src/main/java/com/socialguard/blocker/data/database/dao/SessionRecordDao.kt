@@ -1,7 +1,7 @@
-package com.socialguard.blocker.data.database.dao
+package com.quell.app.data.database.dao
 
 import androidx.room.*
-import com.socialguard.blocker.data.model.SessionRecord
+import com.quell.app.data.model.SessionRecord
 
 @Dao
 interface SessionRecordDao {
