@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -27,6 +28,11 @@ class BlockingOverlayManager(private val context: Context) {
 
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // MaterialCardView requires a Theme.MaterialComponents (or Material3) context.
+    // applicationContext has no theme, so we wrap it before inflating overlays.
+    private val themedContext = ContextThemeWrapper(context, R.style.Theme_Quell)
+    private val inflater = LayoutInflater.from(themedContext)
 
     // Only written/read on the main thread — no lock needed.
     private var overlayView: View? = null
@@ -51,7 +57,7 @@ class BlockingOverlayManager(private val context: Context) {
         assertMainThread()
         if (overlayView != null) return   // already showing — atomic on main thread
 
-        val inflater = LayoutInflater.from(context)
+        val inflater = this.inflater
         val view = inflater.inflate(R.layout.overlay_blocking, null)
 
         val appName = if (packageName.contains("instagram")) "Instagram" else "Facebook"
@@ -94,7 +100,7 @@ class BlockingOverlayManager(private val context: Context) {
         assertMainThread()
         if (overlayView != null) return
 
-        val inflater = LayoutInflater.from(context)
+        val inflater = this.inflater
         val view = inflater.inflate(R.layout.dialog_usage_popup, null)
 
         val appName = if (packageName.contains("instagram")) "Instagram" else "Facebook"
