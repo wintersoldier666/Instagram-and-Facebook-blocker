@@ -44,7 +44,7 @@ class BlockingAccessibilityService : AccessibilityService() {
         // These come from event.source on TYPE_VIEW_CLICKED — no tree traversal needed.
         private val REELS_LABELS       = setOf("reels")
         private val EXPLORE_LABELS     = setOf("search", "explore", "search and explore")
-        private val WATCH_LABELS       = setOf("watch", "video", "videos", "facebook watch")
+        private val WATCH_LABELS       = setOf("watch", "video", "videos", "facebook watch", "reels", "shorts")
         private val MARKETPLACE_LABELS = setOf("marketplace")
 
         // Non-tab screen hints for tree traversal (DMs / Gaming).
@@ -91,9 +91,13 @@ class BlockingAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
 
-            // App opened / screen changed — run master checks (block toggle, time limits, session)
+            // App opened / screen changed — run master checks (block toggle, time limits, session).
+            // Also check the event's className for Reels/Watch screens opened from any entry
+            // point (DMs, Explore, home feed) — Instagram/Facebook class names reliably contain
+            // "reel" / "watch" / "video" for their video viewer activities.
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
-                serviceScope.launch { handleAppOpened(pkg) }
+                val className = event.className?.toString()?.lowercase() ?: ""
+                serviceScope.launch { handleAppOpened(pkg, className) }
             }
 
             // User tapped something — check if it's a blocked nav tab via event.source.
@@ -130,10 +134,27 @@ class BlockingAccessibilityService : AccessibilityService() {
     // Master checks — run on every window state change
     // -------------------------------------------------------------------------
 
-    private suspend fun handleAppOpened(pkg: String) {
+    private suspend fun handleAppOpened(pkg: String, className: String = "") {
         try {
             val settings = getSettings() ?: return
             val todayMin = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+
+            // Class-name based section detection — catches Reels/Watch opened from DMs,
+            // Explore, home feed, share sheets, etc., not just tapping the nav tab.
+            // Instagram activity names contain "reel"; Facebook contains "watch"/"video".
+            if (className.isNotEmpty()) {
+                if (pkg == BlockingRepository.INSTAGRAM_PKG && settings.blockInstagramReels
+                    && "reel" in className) {
+                    triggerBlock(pkg, "Instagram Reels is blocked", todayMin, snooze = false)
+                    return
+                }
+                if (pkg in setOf(BlockingRepository.FACEBOOK_PKG, BlockingRepository.FACEBOOK_LITE_PKG)
+                    && settings.blockFacebookWatch
+                    && ("watch" in className || "video" in className || "reel" in className)) {
+                    triggerBlock(pkg, "Facebook Watch is blocked", todayMin, snooze = false)
+                    return
+                }
+            }
 
             // 1. Master block
             val masterBlocked = when {
@@ -311,7 +332,11 @@ class BlockingAccessibilityService : AccessibilityService() {
     private fun triggerBlock(pkg: String, reason: String, todayMin: Long, snooze: Boolean) {
         mainHandler.post {
             if (overlayManager.isShowing()) return@post
-            performGlobalAction(GLOBAL_ACTION_HOME)
+            // Show overlay OVER the current screen — do NOT go home first.
+            // Going home before showing the overlay was making Instagram leave the foreground,
+            // which caused the foreground watcher in BlockingOverlayManager to immediately
+            // dismiss the overlay (because Instagram was no longer in the foreground).
+            // Now the overlay appears on top of Instagram; the user taps "Go Home" to leave.
             overlayManager.showBlockOverlay(
                 packageName  = pkg,
                 reason       = reason,

@@ -49,6 +49,9 @@ class SettingsFragment : Fragment() {
     }
 
     private fun setupDebugButtons() {
+        binding.btnOpenAccessibility.setOnClickListener {
+            startActivity(com.quell.app.util.PermissionHelper.accessibilitySettingsIntent())
+        }
         binding.btnShareLog.setOnClickListener {
             val logFile = CrashLogger.getLogFile(requireContext())
             if (!logFile.exists() || logFile.length() == 0L) {

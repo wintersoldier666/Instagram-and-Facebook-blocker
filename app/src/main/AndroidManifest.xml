@@ -79,6 +79,18 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Quick Settings tile — lets user disable Quell one-tap when opening banking apps -->
+        <service
+            android:name=".service.QuellTileService"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="Quell"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- Boot Receiver -->
         <receiver
             android:name=".receiver.BootReceiver"
