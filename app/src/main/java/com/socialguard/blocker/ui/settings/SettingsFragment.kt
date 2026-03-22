@@ -1,12 +1,16 @@
 package com.quell.app.ui.settings
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import com.quell.app.databinding.FragmentSettingsBinding
+import com.quell.app.util.CrashLogger
 
 class SettingsFragment : Fragment() {
 
@@ -25,6 +29,8 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        setupDebugButtons()
+
         viewModel.settings.observe(viewLifecycleOwner) { settings ->
             settings ?: return@observe
             // Detach listeners before updating UI to avoid re-triggering saves
@@ -39,6 +45,33 @@ class SettingsFragment : Fragment() {
             binding.switchShowPopup.isChecked = settings.showUsagePopup
 
             attachListeners()
+        }
+    }
+
+    private fun setupDebugButtons() {
+        binding.btnShareLog.setOnClickListener {
+            val logFile = CrashLogger.getLogFile(requireContext())
+            if (!logFile.exists() || logFile.length() == 0L) {
+                Toast.makeText(requireContext(), "No crash log found — app hasn't crashed yet!", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+            val uri = FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                logFile
+            )
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Quell crash log")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "Share bug log"))
+        }
+
+        binding.btnClearLog.setOnClickListener {
+            CrashLogger.clearLog(requireContext())
+            Toast.makeText(requireContext(), "Crash log cleared", Toast.LENGTH_SHORT).show()
         }
     }
 
