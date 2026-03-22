@@ -28,4 +28,5 @@
 
     <!-- Accessibility Service -->
     <string name="accessibility_service_description">SocialGuard monitors foreground apps to block Instagram and Facebook based on your settings. It reads app names and navigation elements to enforce content restrictions.</string>
+    <string name="sample_quote">Your attention is your most valuable resource.</string>
 </resources>

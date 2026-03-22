@@ -47,18 +47,18 @@ class BlockingOverlayManager(private val context: Context) {
 
             val appName = if (packageName.contains("instagram")) "Instagram" else "Facebook"
 
-            view.findViewById<TextView>(R.id.tvAppName).text = appName
-            view.findViewById<TextView>(R.id.tvReason).text = reason
-            view.findViewById<TextView>(R.id.tvScreentime).text =
+            view.findViewById<TextView>(R.id.tv_app_name).text = appName
+            view.findViewById<TextView>(R.id.tv_reason).text = reason
+            view.findViewById<TextView>(R.id.tv_screentime).text =
                 "You've used $appName for ${TimeUtils.formatDuration(todayMinutes)} today"
-            view.findViewById<TextView>(R.id.tvQuote).text = QuotesProvider.getNext()
+            view.findViewById<TextView>(R.id.tv_quote).text = QuotesProvider.getNext()
 
-            view.findViewById<Button>(R.id.btnGoHome).setOnClickListener {
+            view.findViewById<Button>(R.id.btn_go_home).setOnClickListener {
                 dismissOverlay()
                 onGoHome()
             }
 
-            val btnSnooze = view.findViewById<Button>(R.id.btnSnooze)
+            val btnSnooze = view.findViewById<Button>(R.id.btn_snooze)
             if (onSnooze != null) {
                 btnSnooze.visibility = View.VISIBLE
                 btnSnooze.setOnClickListener {
@@ -110,19 +110,19 @@ class BlockingOverlayManager(private val context: Context) {
 
             val appName = if (packageName.contains("instagram")) "Instagram" else "Facebook"
 
-            view.findViewById<TextView>(R.id.tvPopupAppName).text = appName
-            view.findViewById<TextView>(R.id.tvPopupScreentime).text =
+            view.findViewById<TextView>(R.id.tv_popup_app_name).text = appName
+            view.findViewById<TextView>(R.id.tv_popup_screentime).text =
                 if (todayMinutes > 0)
                     "You've already used $appName for ${TimeUtils.formatDuration(todayMinutes)} today."
                 else
                     "You haven't used $appName yet today. Stay mindful!"
-            view.findViewById<TextView>(R.id.tvPopupQuote).text = QuotesProvider.getNext()
+            view.findViewById<TextView>(R.id.tv_popup_quote).text = QuotesProvider.getNext()
 
-            view.findViewById<Button>(R.id.btnPopupContinue).setOnClickListener {
+            view.findViewById<Button>(R.id.btn_popup_continue).setOnClickListener {
                 dismissOverlay()
                 onContinue()
             }
-            view.findViewById<Button>(R.id.btnPopupBlock).setOnClickListener {
+            view.findViewById<Button>(R.id.btn_popup_block).setOnClickListener {
                 dismissOverlay()
                 onBlockForToday()
             }

@@ -72,7 +72,7 @@
             android:id="@+id/tv_popup_quote"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="\"Your attention is your most valuable resource.\""
+            android:text="@string/sample_quote"
             android:textColor="#CCCCCC"
             android:textSize="13sp"
             android:gravity="center"
