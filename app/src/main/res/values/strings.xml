@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SocialGuard</string>
+    <string name="app_description">Take back control of your screen time</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Home</string>
+    <string name="nav_settings">Locks</string>
+    <string name="nav_timelocks">Schedule</string>
+    <string name="nav_stats">Stats</string>
+
+    <!-- Blocking -->
+    <string name="blocked_message">This app is blocked by SocialGuard</string>
+    <string name="btn_go_home">Go Back Home</string>
+    <string name="btn_snooze">Allow 5 more minutes</string>
+
+    <!-- Permissions -->
+    <string name="perm_accessibility_title">Accessibility Service</string>
+    <string name="perm_accessibility_desc">Required to detect and block app usage</string>
+    <string name="perm_overlay_title">Draw Over Other Apps</string>
+    <string name="perm_overlay_desc">Required to show blocking screens</string>
+    <string name="perm_usage_title">Usage Stats</string>
+    <string name="perm_usage_desc">Required to track screen time</string>
+
+    <!-- Notification -->
+    <string name="notification_title">SocialGuard Active</string>
+    <string name="notification_text">Monitoring Instagram and Facebook usage</string>
+
+    <!-- Accessibility Service -->
+    <string name="accessibility_service_description">SocialGuard monitors foreground apps to block Instagram and Facebook based on your settings. It reads app names and navigation elements to enforce content restrictions.</string>
+</resources>

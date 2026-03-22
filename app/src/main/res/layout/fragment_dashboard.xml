@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SocialGuard"
+            android:textColor="@color/white"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Take back control of your time"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- Permission Setup Card (hidden when all granted) -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_permissions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="@color/warning_bg"
+            app:cardCornerRadius="12dp"
+            app:strokeColor="@color/warning"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Setup Required"
+                    android:textColor="@color/warning"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Accessibility -->
+                <LinearLayout
+                    android:id="@+id/card_perm_accessibility"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:background="@drawable/ripple_bg"
+                    android:padding="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/tv_perm_accessibility"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="✗ Enable Accessibility Service"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textColor="@color/primary"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <!-- Overlay -->
+                <LinearLayout
+                    android:id="@+id/card_perm_overlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:background="@drawable/ripple_bg"
+                    android:padding="8dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/tv_perm_overlay"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="✗ Grant Overlay Permission"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textColor="@color/primary"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <!-- Usage Stats -->
+                <LinearLayout
+                    android:id="@+id/card_perm_usage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:background="@drawable/ripple_bg"
+                    android:padding="8dp"
+                    android:clickable="true"
+                    android:focusable="true">
+
+                    <TextView
+                        android:id="@+id/tv_perm_usage"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="✗ Grant Usage Stats Access"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="›"
+                        android:textColor="@color/primary"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Instagram Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Instagram"
+                        android:textColor="@color/white"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_instagram_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Allowed"
+                        android:textSize="11sp"
+                        style="@style/Widget.Material3.Chip.Suggestion" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_block_instagram"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_instagram_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 min"
+                    android:textColor="@color/instagram_color"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    tools:text="1h 23m" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="used today"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="8dp" />
+
+                <ProgressBar
+                    android:id="@+id/progress_instagram"
+                    style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp"
+                    android:max="180"
+                    android:progress="0"
+                    android:progressTint="@color/instagram_color"
+                    android:progressBackgroundTint="@color/surface_variant" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Facebook Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Facebook"
+                        android:textColor="@color/white"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/chip_facebook_status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Allowed"
+                        android:textSize="11sp"
+                        style="@style/Widget.Material3.Chip.Suggestion" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/switch_block_facebook"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_facebook_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 min"
+                    android:textColor="@color/facebook_color"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    tools:text="45m" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="used today"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="8dp" />
+
+                <ProgressBar
+                    android:id="@+id/progress_facebook"
+                    style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp"
+                    android:max="180"
+                    android:progress="0"
+                    android:progressTint="@color/facebook_color"
+                    android:progressBackgroundTint="@color/surface_variant" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</ScrollView>

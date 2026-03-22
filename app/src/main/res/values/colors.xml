@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Core palette (dark theme) -->
+    <color name="background">#0D0D0D</color>
+    <color name="surface">#1A1A1A</color>
+    <color name="surface_variant">#2A2A2A</color>
+
+    <!-- Primary / Accent -->
+    <color name="primary">#7C3AED</color>
+    <color name="primary_variant">#6D28D9</color>
+    <color name="on_primary">#FFFFFF</color>
+
+    <!-- Text -->
+    <color name="white">#FFFFFF</color>
+    <color name="text_primary">#EEEEEE</color>
+    <color name="text_secondary">#888888</color>
+
+    <!-- Status colours -->
+    <color name="warning">#F59E0B</color>
+    <color name="warning_bg">#1A1500</color>
+    <color name="error">#EF4444</color>
+    <color name="success">#22C55E</color>
+
+    <!-- App brand colours -->
+    <color name="instagram_color">#E1306C</color>
+    <color name="facebook_color">#1877F2</color>
+
+    <!-- Misc -->
+    <color name="divider">#252525</color>
+    <color name="ripple">#337C3AED</color>
+
+    <!-- Navigation item states -->
+    <color name="nav_item_active">#7C3AED</color>
+    <color name="nav_item_inactive">#888888</color>
+</resources>

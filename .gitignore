@@ -1,0 +1,23 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.keystore
+!debug.keystore
+
+# Android specific
+/app/build/
+
+# Kotlin
+*.class
+
+# Gradle
+gradlew.bat
+.gradle/
+gradle/wrapper/gradle-wrapper.jar

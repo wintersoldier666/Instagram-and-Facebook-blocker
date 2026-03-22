@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/dashboardFragment">
+
+    <fragment
+        android:id="@+id/dashboardFragment"
+        android:name="com.socialguard.blocker.ui.dashboard.DashboardFragment"
+        android:label="Dashboard"
+        tools:layout="@layout/fragment_dashboard" />
+
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="com.socialguard.blocker.ui.settings.SettingsFragment"
+        android:label="Content Locks"
+        tools:layout="@layout/fragment_settings" />
+
+    <fragment
+        android:id="@+id/timeLocksFragment"
+        android:name="com.socialguard.blocker.ui.timelocks.TimeLocksFragment"
+        android:label="Time Locks"
+        tools:layout="@layout/fragment_timelocks" />
+
+    <fragment
+        android:id="@+id/statsFragment"
+        android:name="com.socialguard.blocker.ui.stats.StatsFragment"
+        android:label="Stats"
+        tools:layout="@layout/fragment_stats" />
+
+</navigation>

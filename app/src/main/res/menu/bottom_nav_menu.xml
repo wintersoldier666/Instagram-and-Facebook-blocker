@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@+id/dashboardFragment"
+        android:icon="@drawable/ic_home"
+        android:title="Home" />
+
+    <item
+        android:id="@+id/settingsFragment"
+        android:icon="@drawable/ic_lock"
+        android:title="Locks" />
+
+    <item
+        android:id="@+id/timeLocksFragment"
+        android:icon="@drawable/ic_schedule"
+        android:title="Schedule" />
+
+    <item
+        android:id="@+id/statsFragment"
+        android:icon="@drawable/ic_chart"
+        android:title="Stats" />
+
+</menu>
