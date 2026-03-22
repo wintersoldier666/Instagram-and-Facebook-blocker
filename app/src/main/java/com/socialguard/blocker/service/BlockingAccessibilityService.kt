@@ -2,7 +2,9 @@ package com.quell.app.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -254,6 +256,13 @@ class BlockingAccessibilityService : AccessibilityService() {
      * Checks in-app navigation for content that should be blocked (Reels, Marketplace, etc.).
      * [rootNode] is captured on the service thread before this coroutine launches; caller must
      * NOT use it after this call since we recycle it here.
+     *
+     * Detection strategy:
+     *  - Video sections (Reels, Watch): audio-first detection.
+     *    isAppPlayingAudio() is the primary signal because Reels/Watch always play audio,
+     *    and this works regardless of how Instagram/Facebook versions implement their nav bar.
+     *    isSelected on the nav tab is kept as a fallback for when the phone is muted.
+     *  - Non-video sections (Explore, DMs, Marketplace, Gaming): accessibility-only.
      */
     private suspend fun checkInAppBlocking(
         pkg: String,
@@ -261,38 +270,56 @@ class BlockingAccessibilityService : AccessibilityService() {
         rootNode: AccessibilityNodeInfo
     ) {
         try {
+            val audioPlaying = isAudioPlaying()
+
             if (pkg == BlockingRepository.INSTAGRAM_PKG) {
-                // Reels and Explore are bottom-nav tabs → requireSelected=true prevents
-                // false matches from the nav bar icons that are always in the view tree
-                if (settings.blockInstagramReels && isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS, requireSelected = true)) {
-                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                    triggerBlock(pkg, "Instagram Reels is blocked", todayMinutes, allowSnooze = false)
-                    return
+                // Reels detection — two complementary signals:
+                //  1. Audio playing + any Reels hint in tree (requireSelected=false):
+                //     Catches auto-playing Reels even if the nav tab doesn't report isSelected.
+                //     Audio is the gate here so "Reels" text on nav icon won't false-trigger
+                //     (nav icon audio is silent).
+                //  2. Reels tab isSelected without audio (muted phone fallback).
+                if (settings.blockInstagramReels) {
+                    val reelsHintAny = isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS, requireSelected = false)
+                    val reelsTabSelected = isNodeMatchingHints(rootNode, INSTAGRAM_REELS_HINTS, requireSelected = true)
+                    val onReels = (audioPlaying && reelsHintAny) || reelsTabSelected
+                    if (onReels) {
+                        val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                        triggerBlock(pkg, "Instagram Reels is blocked", todayMinutes, allowSnooze = false)
+                        return
+                    }
                 }
+                // Explore: no video audio — rely on isSelected
                 if (settings.blockInstagramExplore && isNodeMatchingHints(rootNode, INSTAGRAM_EXPLORE_HINTS, requireSelected = true)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Instagram Explore is blocked", todayMinutes, allowSnooze = false)
                     return
                 }
-                // DMs have no nav tab — match on screen content alone
+                // DMs: no nav tab — match on screen content alone
                 if (settings.blockInstagramDMs && isNodeMatchingHints(rootNode, INSTAGRAM_DM_HINTS, requireSelected = false)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Instagram Direct Messages are blocked", todayMinutes, allowSnooze = false)
                     return
                 }
             } else if (pkg == BlockingRepository.FACEBOOK_PKG || pkg == BlockingRepository.FACEBOOK_LITE_PKG) {
-                // Marketplace and Watch are bottom-nav tabs → requireSelected=true
+                // Watch: same dual-signal logic as Reels
+                if (settings.blockFacebookWatch) {
+                    val watchHintAny = isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS, requireSelected = false)
+                    val watchTabSelected = isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS, requireSelected = true)
+                    val onWatch = (audioPlaying && watchHintAny) || watchTabSelected
+                    if (onWatch) {
+                        val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
+                        triggerBlock(pkg, "Facebook Watch is blocked", todayMinutes, allowSnooze = false)
+                        return
+                    }
+                }
+                // Marketplace: no video — rely on isSelected
                 if (settings.blockFacebookMarketplace && isNodeMatchingHints(rootNode, FACEBOOK_MARKETPLACE_HINTS, requireSelected = true)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Facebook Marketplace is blocked", todayMinutes, allowSnooze = false)
                     return
                 }
-                if (settings.blockFacebookWatch && isNodeMatchingHints(rootNode, FACEBOOK_WATCH_HINTS, requireSelected = true)) {
-                    val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
-                    triggerBlock(pkg, "Facebook Watch is blocked", todayMinutes, allowSnooze = false)
-                    return
-                }
-                // Gaming is in a side menu, not a dedicated nav tab → requireSelected=false
+                // Gaming: side menu, no nav tab → requireSelected=false
                 if (settings.blockFacebookGaming && isNodeMatchingHints(rootNode, FACEBOOK_GAMING_HINTS, requireSelected = false)) {
                     val todayMinutes = UsageStatsHelper.getTodayUsageMinutes(applicationContext, pkg)
                     triggerBlock(pkg, "Facebook Gaming is blocked", todayMinutes, allowSnooze = false)
@@ -301,6 +328,26 @@ class BlockingAccessibilityService : AccessibilityService() {
             }
         } finally {
             rootNode.recycle()
+        }
+    }
+
+    /**
+     * Returns true if audio is currently playing on the device.
+     *
+     * AudioPlaybackConfiguration.getClientUid() is @hide and not in the public SDK stubs,
+     * so we use AudioManager.isMusicActive() which is always public.
+     * This is imprecise (any app's audio counts), but we only call this when the target
+     * app is already confirmed to be in the foreground via the accessibility event, so
+     * false positives (background music from Spotify etc.) are the only risk — mitigated
+     * by also requiring accessibility hints in the caller.
+     */
+    private fun isAudioPlaying(): Boolean {
+        return try {
+            val audioManager = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager.isMusicActive
+        } catch (e: Exception) {
+            Log.w("QuellService", "isAudioPlaying failed", e)
+            false
         }
     }
 
