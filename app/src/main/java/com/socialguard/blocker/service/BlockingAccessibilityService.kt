@@ -66,16 +66,6 @@ class BlockingAccessibilityService : AccessibilityService() {
         repository = BlockingRepository.getInstance(applicationContext)
         overlayManager = BlockingOverlayManager(applicationContext)
 
-        serviceInfo = serviceInfo.also { info ->
-            info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-                    AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or
-                    AccessibilityEvent.TYPE_VIEW_CLICKED
-            info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
-            info.flags = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
-                    AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            info.notificationTimeout = 100
-        }
-
         // Start foreground monitoring service
         startMonitoringService()
     }

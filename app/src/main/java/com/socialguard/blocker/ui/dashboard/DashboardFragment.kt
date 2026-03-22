@@ -64,12 +64,14 @@ class DashboardFragment : Fragment() {
 
             updateBlockStatusUI(settings.blockInstagram, settings.blockFacebook)
 
-            // Streak badge
-            if (settings.currentStreak > 0) {
-                binding.cardStreak.visibility = View.VISIBLE
-                binding.tvStreakCount.text = settings.currentStreak.toString()
-            } else {
-                binding.cardStreak.visibility = View.GONE
+            // Streak card — always visible, Duolingo-style
+            binding.tvStreakCount.text = settings.currentStreak.toString()
+            binding.tvStreakSubtitle.text = when {
+                settings.currentStreak == 0 -> "Start your streak today!"
+                settings.currentStreak == 1 -> "Great start! Keep it up tomorrow."
+                settings.currentStreak < 7  -> "${settings.currentStreak} days strong. Don't break the chain!"
+                settings.currentStreak < 30 -> "🏆 ${settings.currentStreak} days! You're on fire!"
+                else                        -> "🌟 ${settings.currentStreak} days! Legendary focus!"
             }
 
             setupToggles()

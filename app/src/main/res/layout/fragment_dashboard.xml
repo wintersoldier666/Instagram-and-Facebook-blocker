@@ -43,60 +43,103 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="14sp" />
             </LinearLayout>
+        </LinearLayout>
 
-            <!-- Streak badge -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/card_streak"
-                android:layout_width="wrap_content"
+        <!-- Duolingo-style streak card — always visible -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/card_streak"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="4dp"
+            app:cardBackgroundColor="#1A1A0A"
+            app:cardCornerRadius="20dp"
+            app:strokeColor="#FF6B00"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:visibility="gone"
-                app:cardBackgroundColor="#1A2D1A"
-                app:cardCornerRadius="12dp"
-                app:strokeColor="@color/success"
-                app:strokeWidth="1dp">
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingStart="20dp"
+                android:paddingEnd="20dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp">
 
+                <!-- Fire + count -->
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center"
-                    android:padding="10dp">
+                    android:layout_weight="1"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="🔥"
-                        android:textSize="18sp"
-                        android:gravity="center"
-                        android:layout_gravity="center" />
+                        android:textSize="36sp"
+                        android:layout_marginEnd="14dp" />
 
-                    <TextView
-                        android:id="@+id/tv_streak_count"
+                    <LinearLayout
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="0"
-                        android:textColor="@color/success"
-                        android:textSize="16sp"
-                        android:textStyle="bold"
-                        android:gravity="center" />
+                        android:orientation="vertical">
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="day streak"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="10sp"
-                        android:gravity="center" />
+                        <LinearLayout
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="bottom">
+
+                            <TextView
+                                android:id="@+id/tv_streak_count"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="0"
+                                android:textColor="#FF6B00"
+                                android:textSize="42sp"
+                                android:textStyle="bold"
+                                android:lineSpacingMultiplier="0.9"
+                                tools:text="7" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text=" day streak"
+                                android:textColor="#FF6B00"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
+                                android:layout_marginBottom="6dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_streak_subtitle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Start your streak today!"
+                            android:textColor="#CC994400"
+                            android:textSize="12sp" />
+                    </LinearLayout>
                 </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-        </LinearLayout>
+
+                <!-- Shield icon on right -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🛡️"
+                    android:textSize="28sp"
+                    android:alpha="0.5" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <View
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="@color/divider"
             android:layout_marginBottom="16dp"
-            android:layout_marginTop="12dp" />
+            android:layout_marginTop="14dp" />
 
         <!-- Permission Setup Card (hidden when all granted) -->
         <com.google.android.material.card.MaterialCardView
