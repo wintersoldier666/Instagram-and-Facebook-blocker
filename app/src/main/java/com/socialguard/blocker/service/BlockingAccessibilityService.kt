@@ -75,7 +75,19 @@ class BlockingAccessibilityService : AccessibilityService() {
         val pkg = event.packageName?.toString() ?: return
 
         when (event.eventType) {
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> handleWindowStateChanged(pkg)
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                handleWindowStateChanged(pkg)
+                // Also run in-app section check immediately on navigation events so that
+                // section blocking (Reels, Watch, etc.) fires the instant the user taps
+                // the tab — don't wait for the first content-change event on the new screen.
+                if (pkg in BlockingRepository.TRACKED_PACKAGES) {
+                    val rootNode = try { rootInActiveWindow } catch (e: Exception) { null } ?: return
+                    serviceScope.launch {
+                        val settings = getSettings() ?: run { runCatching { rootNode.recycle() }; return@launch }
+                        checkInAppBlocking(pkg, settings, rootNode)
+                    }
+                }
+            }
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 if (pkg in BlockingRepository.TRACKED_PACKAGES) {
