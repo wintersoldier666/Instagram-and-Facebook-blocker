@@ -328,25 +328,24 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Banking apps -->
+        <!-- Blocking Mode -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="BANKING APPS"
-            android:textColor="#FFAA00"
+            android:text="BLOCKING MODE"
+            android:textColor="@color/text_secondary"
             android:textSize="12sp"
             android:textStyle="bold"
             android:letterSpacing="0.12"
             android:layout_marginBottom="8dp" />
 
+        <!-- Full Mode card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            app:cardBackgroundColor="#1A120A"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="#FFAA00"
-            app:strokeWidth="1dp">
+            android:layout_marginBottom="10dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="16dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -357,16 +356,16 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Banking apps warn about accessibility services"
-                    android:textColor="#FFAA00"
-                    android:textSize="14sp"
+                    android:text="Full Blocking (Accessibility Service)"
+                    android:textColor="@color/text_primary"
+                    android:textSize="15sp"
                     android:textStyle="bold"
-                    android:layout_marginBottom="6dp" />
+                    android:layout_marginBottom="4dp" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="This is unavoidable — Android lets banking apps detect any active accessibility service. Quell only reads Instagram and Facebook, but banks can't verify this.\n\nFix: Add the Quell Quick Settings tile to your notification shade. When you need banking apps, swipe down → tap the tile → disable Quell → use your bank → re-enable."
+                    android:text="Blocks Reels, Watch, Explore, DMs and sections within apps. Requires accessibility service — banking apps will show a security warning while this is active."
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:lineSpacingMultiplier="1.3"
@@ -378,6 +377,50 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="Open Accessibility Settings" />
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Banking-safe mode card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            app:cardBackgroundColor="#0A1A0A"
+            app:cardCornerRadius="16dp"
+            app:strokeColor="#44BB44"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Banking-Safe Mode (no accessibility)"
+                    android:textColor="#44BB44"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Disable the Accessibility Service — Quell will switch to Usage Stats polling instead. Banking apps will work normally.\n\nTradeoff: Section blocking (Reels, Watch, Explore, DMs) won't work. Only master block, time lock, and daily limits are enforced.\n\nTo activate: open Accessibility Settings below, disable Quell there, then restart the app."
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    android:lineSpacingMultiplier="1.3"
+                    android:layout_marginBottom="12dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_disable_accessibility"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Go to Accessibility Settings to disable" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

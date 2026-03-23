@@ -39,10 +39,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startMonitoringService() {
-        if (PermissionHelper.isAccessibilityServiceEnabled(this)) {
+        // Always start the monitoring service.
+        // When accessibility is enabled it just keeps the process alive.
+        // When accessibility is disabled it activates banking-safe polling mode.
+        if (PermissionHelper.canDrawOverlays(this) &&
+            PermissionHelper.hasUsageStatsPermission(this)) {
             try {
-                val intent = Intent(this, MonitoringForegroundService::class.java)
-                startForegroundService(intent)
+                startForegroundService(Intent(this, MonitoringForegroundService::class.java))
             } catch (e: Exception) {
                 e.printStackTrace()
             }
