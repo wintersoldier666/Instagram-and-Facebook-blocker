@@ -1,6 +1,7 @@
 package com.quell.app.util
 
 import android.app.AppOpsManager
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Process
@@ -78,13 +79,43 @@ object UsageStatsHelper {
 
     /**
      * Returns true if [packageName] is currently the foreground app.
+     *
+     * Uses UsageEvents (last 30 min) to reliably track MOVE_TO_FOREGROUND /
+     * MOVE_TO_BACKGROUND transitions. Falls back to queryUsageStats if no recent
+     * events exist (e.g. user has been idle on same screen for >30 min).
      */
     fun isAppInForeground(context: Context, packageName: String): Boolean {
         if (!hasUsageStatsPermission(context)) return false
 
         val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val now = System.currentTimeMillis()
-        val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 10_000, now)
-        return stats?.maxByOrNull { it.lastTimeUsed }?.packageName == packageName
+
+        // Query events for last 30 minutes
+        val events = usm.queryEvents(now - 30 * 60_000L, now)
+        val event = UsageEvents.Event()
+        var lastForeground: String? = null
+        var hasEvents = false
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            hasEvents = true
+            when (event.eventType) {
+                UsageEvents.Event.MOVE_TO_FOREGROUND -> lastForeground = event.packageName
+                UsageEvents.Event.MOVE_TO_BACKGROUND ->
+                    if (lastForeground == event.packageName) lastForeground = null
+            }
+        }
+
+        if (hasEvents) return lastForeground == packageName
+
+        // No events in last 30 min: user hasn't switched apps. Use daily stats to see
+        // which app was most recently brought to foreground today.
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, cal.timeInMillis, now)
+        val mostRecent = stats?.maxByOrNull { it.lastTimeUsed } ?: return false
+        return mostRecent.packageName == packageName
     }
 }

@@ -63,7 +63,11 @@ class BlockingOverlayManager(private val context: Context) {
         reason: String,
         todayMinutes: Long,
         onGoHome: () -> Unit,
-        onSnooze: (() -> Unit)? = null
+        onSnooze: (() -> Unit)? = null,
+        // Pass false when the caller (e.g. polling service) handles foreground tracking itself.
+        // The watcher polls every second and would fight the service's own poll loop,
+        // causing the overlay to flash on/off.
+        watchForeground: Boolean = true
     ) {
         assertMainThread()
         if (overlayView != null) return
@@ -95,7 +99,7 @@ class BlockingOverlayManager(private val context: Context) {
         }
 
         addOverlay(view, Gravity.TOP or Gravity.START)
-        startForegroundWatcher()
+        if (watchForeground) startForegroundWatcher()
     }
 
     fun showDailyPopup(
@@ -181,17 +185,13 @@ class BlockingOverlayManager(private val context: Context) {
 
     /**
      * Returns true if Instagram or Facebook is the current foreground app.
-     * Uses UsageStatsManager (1-second window) which doesn't require the
-     * accessibility service to monitor non-tracked packages.
+     * Delegates to UsageStatsHelper which uses UsageEvents for reliable detection.
      */
     private fun isTrackedAppForeground(): Boolean {
         return try {
-            val now = System.currentTimeMillis()
-            val stats = usageStatsManager.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY, now - 2_000, now
-            )
-            stats?.maxByOrNull { it.lastTimeUsed }
-                ?.packageName in BlockingRepository.TRACKED_PACKAGES
+            BlockingRepository.TRACKED_PACKAGES.any {
+                com.quell.app.util.UsageStatsHelper.isAppInForeground(context, it)
+            }
         } catch (e: Exception) {
             true  // assume still foreground on error to avoid false dismissal
         }

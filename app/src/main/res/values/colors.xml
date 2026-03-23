@@ -26,6 +26,7 @@
     <color name="facebook_color">#1877F2</color>
 
     <!-- Misc -->
+    <color name="green_accent">#44BB44</color>
     <color name="divider">#252525</color>
     <color name="ripple">#337C3AED</color>
 
